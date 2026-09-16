@@ -1,0 +1,464 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Hospital Command Dashboard — LifeSync</title>
+  <meta name="description" content="LifeSync Hospital Command Center with AI triage, live ambulance tracking, and ML-powered deterioration prediction.">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&family=Outfit:wght@500;700;900&family=Fira+Code:wght@500&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-dark: #020617;
+      --bg-panel: rgba(15, 23, 42, 0.7);
+      --glass-border: rgba(255, 255, 255, 0.1);
+      --primary: #0ea5e9;
+      --accent: #38bdf8;
+      --success: #10b981;
+      --warning: #f59e0b;
+      --danger: #ef4444;
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+    }
+    
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    
+    body { 
+      background: var(--bg-dark); 
+      color: var(--text-main); 
+      font-family: 'Inter', sans-serif; 
+      display: flex; 
+      height: 100vh; 
+      padding: 12px; 
+      gap: 12px; 
+      overflow: hidden; 
+      background-image: radial-gradient(circle at top right, #0f172a, #020617); 
+    }
+    
+    .panel { 
+      background: var(--bg-panel); 
+      border-radius: 18px; 
+      padding: 20px; 
+      border: 1px solid var(--glass-border); 
+      display: flex; 
+      flex-direction: column; 
+      gap: 12px; 
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6); 
+      backdrop-filter: blur(20px); 
+      -webkit-backdrop-filter: blur(20px); 
+    }
+    
+    .left-panel { width: 28%; min-width: 350px; overflow-y: auto; }
+    
+    .middle-panel { 
+      flex: 1; 
+      border-radius: 18px; 
+      overflow: hidden; 
+      position: relative; 
+      border: 1px solid rgba(255,255,255,0.1); 
+      box-shadow: 0 8px 32px rgba(0,0,0,0.6); 
+    }
+    
+    .right-panel { width: 24%; min-width: 300px; }
+    
+    .card { 
+      background: linear-gradient(145deg, rgba(30, 41, 59, 0.6), rgba(15, 23, 42, 0.9)); 
+      padding: 14px; 
+      border-radius: 14px; 
+      border: 1px solid rgba(255,255,255,0.05); 
+      transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275), box-shadow 0.3s; 
+    }
+    
+    .card:hover { transform: translateY(-3px); box-shadow: 0 8px 20px rgba(0,0,0,0.4); }
+    
+    .card-title { color: var(--text-muted); font-size: 11px; text-transform: uppercase; font-weight: 700; margin-bottom: 3px; letter-spacing: 1px; }
+    .card-subtitle { font-size: 10px; color: #64748b; margin-bottom: 6px; }
+    
+    .card-value { font-family: 'Outfit', sans-serif; font-size: 36px; font-weight: 900; text-shadow: 0 0 12px rgba(255,255,255,0.1); line-height: 1; }
+    
+    .text-green { color: var(--success); text-shadow: 0 0 18px rgba(16, 185, 129, 0.5); } 
+    .text-yellow { color: var(--warning); text-shadow: 0 0 18px rgba(245, 158, 11, 0.5); } 
+    .text-red { color: var(--danger); text-shadow: 0 0 18px rgba(239, 68, 68, 0.5); }
+    
+    @keyframes pulse-red { 0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.5); } 70% { box-shadow: 0 0 0 15px rgba(239, 68, 68, 0); } 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); } }
+    .pulse-critical { animation: pulse-red 1.5s infinite; border-color: var(--danger) !important; }
+    
+    /* Risk Gauge */
+    .risk-gauge-bg {
+      width: 100%; height: 6px; background: rgba(0,0,0,0.4); border-radius: 4px; overflow: hidden; margin-top: 8px; border: 1px solid rgba(255,255,255,0.05);
+    }
+    .risk-gauge-fill {
+      height: 100%; width: 0%; border-radius: 4px; transition: width 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    }
+
+    /* ML Confidence Gauge */
+    .ml-card {
+      background: linear-gradient(145deg, rgba(14, 165, 233, 0.08), rgba(59, 130, 246, 0.08));
+      border: 1px solid rgba(14, 165, 233, 0.3);
+    }
+    .ml-label { font-family: 'Outfit'; font-size: 11px; color: var(--accent); font-weight: 700; text-transform: uppercase; letter-spacing: 1px; }
+    .ml-value { font-family: 'Outfit'; font-size: 28px; font-weight: 900; color: var(--accent); text-shadow: 0 0 15px rgba(14, 165, 233, 0.4); }
+    .ml-bar-bg { width: 100%; height: 4px; background: rgba(0,0,0,0.3); border-radius: 3px; margin-top: 6px; }
+    .ml-bar-fill { height: 100%; width: 0%; background: var(--accent); border-radius: 3px; transition: width 0.5s ease; }
+
+    .prob-row { display: flex; justify-content: space-between; font-size: 10px; margin-top: 6px; color: var(--text-muted); font-weight: 600; }
+    .prob-row .val { font-family: 'Fira Code'; }
+    
+    #map { width: 100%; height: 100%; background: #000; }
+    
+    .hash-box { 
+      font-family: 'Fira Code', monospace; 
+      font-size: 10px; 
+      color: var(--success); 
+      word-break: break-all; 
+      background: rgba(0,0,0,0.5); 
+      padding: 10px; 
+      border-radius: 8px; 
+      border: 1px solid rgba(16, 185, 129, 0.2); 
+      line-height: 1.5; 
+      box-shadow: inset 0 0 8px rgba(0,0,0,0.4); 
+    }
+
+    /* Chat UI */
+    #chatBox { 
+      flex: 1; 
+      background: rgba(0,0,0,0.4); 
+      border-radius: 12px; 
+      padding: 12px; 
+      overflow-y: auto; 
+      display: flex; 
+      flex-direction: column; 
+      gap: 10px; 
+      border: 1px solid rgba(255,255,255,0.05); 
+      box-shadow: inset 0 4px 15px rgba(0,0,0,0.4);
+    }
+    
+    .chat-msg { font-size: 13px; padding: 10px 12px; border-radius: 10px; max-width: 85%; animation: fadeIn 0.3s; box-shadow: 0 3px 10px rgba(0,0,0,0.2); }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+    
+    .chat-msg.ambulance { background: rgba(30, 41, 59, 0.8); align-self: flex-start; border: 1px solid rgba(255,255,255,0.1); border-bottom-left-radius: 2px; }
+    .chat-msg.hospital { background: linear-gradient(135deg, var(--success), #059669); align-self: flex-end; color: #fff; border-bottom-right-radius: 2px; }
+    .chat-msg.agent { background: rgba(14, 165, 233, 0.12); border: 1px solid rgba(14, 165, 233, 0.3); align-self: center; color: #bae6fd; font-size: 12px; text-align: center; width: 100%; max-width: 100%; font-weight: 600; box-shadow: 0 0 12px rgba(14, 165, 233, 0.15); }
+    
+    .chat-input-row { display: flex; gap: 8px; margin-top: 8px; }
+    .chat-input-row input { flex: 1; padding: 10px 14px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.1); background: rgba(30, 41, 59, 0.8); color: white; transition: 0.3s; font-family: 'Inter'; font-size: 13px; }
+    .chat-input-row input:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 10px rgba(14, 165, 233, 0.25); }
+    .chat-input-row button { padding: 10px 18px; border-radius: 10px; border: none; background: linear-gradient(135deg, var(--success), #059669); color: white; font-weight: bold; cursor: pointer; transition: 0.3s; box-shadow: 0 4px 12px rgba(16, 185, 129, 0.4); font-size: 13px; }
+    .chat-input-row button:hover { transform: translateY(-2px); box-shadow: 0 6px 18px rgba(16, 185, 129, 0.5); }
+    
+    .qa-btn { background: rgba(59, 130, 246, 0.12); border: 1px solid rgba(59, 130, 246, 0.3); color: #bae6fd; padding: 7px 10px; border-radius: 8px; font-size: 11px; font-weight: 600; cursor: pointer; transition: 0.3s; flex: 1; white-space: nowrap; }
+    .qa-btn:hover { background: #3b82f6; color: #fff; transform: translateY(-2px); }
+
+    @keyframes pulse-dot { 0% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); } 70% { box-shadow: 0 0 0 8px rgba(16, 185, 129, 0); } 100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); } }
+
+    /* Green Wave Button */
+    .green-wave-btn {
+      position: absolute; top: 16px; right: 16px; z-index: 1000;
+      background: rgba(15, 23, 42, 0.85); border: 1px solid var(--success);
+      color: var(--success); padding: 10px 18px; border-radius: 10px;
+      font-family: 'Outfit'; font-weight: 800; text-transform: uppercase;
+      cursor: pointer; backdrop-filter: blur(10px); transition: 0.3s;
+      box-shadow: 0 4px 12px rgba(16, 185, 129, 0.2);
+      display: flex; align-items: center; gap: 8px; font-size: 13px;
+    }
+    .green-wave-btn:hover { background: rgba(16, 185, 129, 0.1); transform: scale(1.03); }
+    .green-wave-btn.active {
+      background: var(--success); color: white;
+      box-shadow: 0 0 25px rgba(16, 185, 129, 0.6);
+      animation: pulse-wave 2s infinite;
+    }
+    @keyframes pulse-wave { 0% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.6); } 70% { box-shadow: 0 0 0 15px rgba(16, 185, 129, 0); } 100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); } }
+
+    /* Scrollbar */
+    ::-webkit-scrollbar { width: 5px; }
+    ::-webkit-scrollbar-track { background: rgba(0,0,0,0.2); }
+    ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 4px; }
+    ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.3); }
+  </style>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.5/socket.io.min.js"></script>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+</head>
+<body>
+  <!-- LEFT PANEL: Agentic Command -->
+  <div class="panel left-panel">
+    <h2 style="font-family: 'Outfit'; font-size: 22px; font-weight: 800;">⚡ Agentic Command Center</h2>
+    
+    <!-- ABHA Patient Card -->
+    <div class="card" id="patientInfoHospital" style="display: none; border-color: var(--primary); background: rgba(14, 165, 233, 0.05); padding: 14px;">
+      <div class="card-title" style="color: var(--primary);">👤 Incoming Patient (ABHA Verified)</div>
+      <div id="pName" style="font-size: 18px; font-family: 'Outfit'; font-weight: 800; margin-bottom: 4px;">--</div>
+      <div style="font-size: 12px; color: var(--text-muted); line-height: 1.5;">
+        Blood Group: <strong id="pBlood" style="color: var(--danger); font-size: 14px;">--</strong><br>
+        Allergies: <span id="pAllergies">--</span><br>
+        History: <span id="pHistory">--</span>
+      </div>
+    </div>
+
+    <!-- Perceive: Vitals -->
+    <div style="display: flex; gap: 10px;">
+      <div class="card" style="flex: 1;">
+        <div class="card-title">1. PERCEIVES</div>
+        <div class="card-subtitle">Live Heart Rate</div>
+        <div id="hrDisplay" class="card-value" style="font-size: 28px;">--</div>
+      </div>
+      <div class="card" style="flex: 1;">
+        <div class="card-title">1. PERCEIVES</div>
+        <div class="card-subtitle">Live Blood Oxygen</div>
+        <div id="spo2Display" class="card-value" style="font-size: 28px;">--</div>
+      </div>
+    </div>
+    
+    <!-- Reason: AI Status -->
+    <div class="card" id="statusCard" style="border: 1px solid var(--success); background: rgba(16, 185, 129, 0.05);">
+      <div class="card-title">2. REASONS</div>
+      <div class="card-subtitle">Agentic Deterioration Index</div>
+      <div style="display: flex; justify-content: space-between; align-items: flex-end;">
+        <div id="statusDisplay" class="card-value text-green">STABLE</div>
+        <div id="riskDisplay" style="color: var(--text-muted); font-size: 16px; font-weight: 700; font-family: 'Outfit';">--%</div>
+      </div>
+      <div class="risk-gauge-bg">
+        <div id="riskFill" class="risk-gauge-fill" style="background: var(--success); width: 0%;"></div>
+      </div>
+      <div id="horizonDisplay" style="color: var(--warning); font-size: 11px; margin-top: 8px; font-weight: 700; text-transform: uppercase;">Horizon: Stable</div>
+    </div>
+
+    <!-- ML Confidence -->
+    <div class="card ml-card" style="padding: 12px;">
+      <div class="ml-label">🧠 ML Model Confidence</div>
+      <div class="ml-value" id="mlConfidenceDisplay">--%</div>
+      <div class="ml-bar-bg"><div class="ml-bar-fill" id="mlConfidenceFill"></div></div>
+      <div class="prob-row" id="probRow">
+        <span>S: <span class="val" id="probStable">--</span>%</span>
+        <span>W: <span class="val" id="probWarning">--</span>%</span>
+        <span>C: <span class="val" id="probCritical">--</span>%</span>
+      </div>
+    </div>
+    
+    <!-- Act: Routing -->
+    <div class="card" style="background: rgba(59, 130, 246, 0.05); border-color: rgba(59, 130, 246, 0.3);">
+      <div class="card-title">3. ACTS</div>
+      <div class="card-subtitle">Autonomous Route Assignment</div>
+      <div id="destinationDisplay" style="font-size: 14px; font-weight: 700; color: #60a5fa; font-family: 'Outfit';">Awaiting coordinates...</div>
+    </div>
+    
+    <!-- Secure: Ledger -->
+    <div class="card" style="padding: 12px;">
+      <div class="card-title">4. SECURES</div>
+      <div class="card-subtitle">SHA-256 Cryptographic Vault</div>
+      <div id="hashDisplay" class="hash-box">Waiting for secure packet...</div>
+    </div>
+  </div>
+  
+  <!-- MIDDLE PANEL: Map -->
+  <div class="middle-panel">
+    <button class="green-wave-btn" id="greenWaveBtn" onclick="toggleGreenWave()">
+      <span style="font-size: 16px;">🚦</span> Activate Green Wave
+    </button>
+    <div id="map"></div>
+  </div>
+  
+  <!-- RIGHT PANEL: Communications -->
+  <div class="panel right-panel">
+    <h2 style="font-family: 'Outfit'; font-size: 18px; font-weight: 800; display: flex; align-items: center; gap: 8px;">
+      💬 ER Comms 
+      <span style="display: inline-block; width: 8px; height: 8px; background: var(--success); border-radius: 50%; box-shadow: 0 0 10px var(--success); animation: pulse-dot 2s infinite;"></span>
+    </h2>
+    
+    <div style="display: flex; gap: 6px; flex-wrap: wrap;">
+      <button class="qa-btn" onclick="sendQuickMsg('Standing by to receive patient.')">Standby</button>
+      <button class="qa-btn" onclick="sendQuickMsg('Preparing Trauma Bay 1.')">Prep Trauma</button>
+      <button class="qa-btn" onclick="sendQuickMsg('Requesting ETA update.')">Req ETA</button>
+    </div>
+    
+    <div id="chatBox"></div>
+    
+    <div class="chat-input-row">
+      <input type="text" id="msgInput" placeholder="Message ambulance..." onkeypress="if(event.key === 'Enter') sendMessage()">
+      <button onclick="sendMessage()">Send</button>
+    </div>
+  </div>
+
+  <script>
+    // ==================== SOCKET.IO ====================
+    const socket = io();
+    const hrDisplay = document.getElementById('hrDisplay'); 
+    const spo2Display = document.getElementById('spo2Display'); 
+    const statusDisplay = document.getElementById('statusDisplay'); 
+    const riskDisplay = document.getElementById('riskDisplay'); 
+    const riskFill = document.getElementById('riskFill');
+    const destinationDisplay = document.getElementById('destinationDisplay'); 
+    const hashDisplay = document.getElementById('hashDisplay'); 
+    const statusCard = document.getElementById('statusCard');
+    const mlConfidenceDisplay = document.getElementById('mlConfidenceDisplay');
+    const mlConfidenceFill = document.getElementById('mlConfidenceFill');
+
+    let greenWaveActive = false;
+
+    // ==================== ABHA ====================
+    socket.on('patient_data_received', (patient) => {
+      document.getElementById('patientInfoHospital').style.display = 'block';
+      document.getElementById('pName').innerText = `${patient.name} (Age: ${patient.age})`;
+      document.getElementById('pBlood').innerText = patient.blood_group;
+      document.getElementById('pAllergies').innerText = patient.allergies.join(", ");
+      document.getElementById('pHistory').innerText = patient.history.join(", ");
+    });
+
+    // ==================== MAP (CartoDB Dark — FREE, NO API KEY) ====================
+    const map = L.map('map', { zoomControl: false }).setView([18.52, 73.85], 13);
+    L.control.zoom({ position: 'bottomright' }).addTo(map);
+
+    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+      maxZoom: 19
+    }).addTo(map);
+
+    const hospitalIcon = L.icon({ iconUrl: 'https://cdn-icons-png.flaticon.com/512/8040/8040626.png', iconSize: [36, 36], iconAnchor: [18, 36] });
+    const ambulanceIcon = L.icon({ iconUrl: 'https://cdn-icons-png.flaticon.com/512/1036/1036067.png', iconSize: [30, 30], iconAnchor: [15, 30] });
+    
+    let hospitalMarker = null, ambulanceMarker = null, routeLine = null;
+    let allHospMarkers = {};
+
+    function toggleGreenWave() {
+      greenWaveActive = !greenWaveActive;
+      const btn = document.getElementById('greenWaveBtn');
+      if (greenWaveActive) {
+        btn.classList.add('active');
+        btn.innerHTML = `<span style="font-size: 16px;">🟢</span> Green Wave Active`;
+      } else {
+        btn.classList.remove('active');
+        btn.innerHTML = `<span style="font-size: 16px;">🚦</span> Activate Green Wave`;
+      }
+      // Update route style
+      if (routeLine) {
+        const color = greenWaveActive ? '#10b981' : '#3b82f6';
+        const weight = greenWaveActive ? 7 : 4;
+        routeLine.setStyle({ color, weight, opacity: 0.85 });
+      }
+    }
+
+    // ==================== SOCKET UPDATE ====================
+    socket.on("update", data => {
+      const status = data.status || "STABLE"; 
+      const risk = data.risk_score || 0; 
+      const assignedHospital = data.assigned_hospital; 
+      
+      hrDisplay.innerText = (data.heartRate || data.hr || '--') + ' BPM';
+      spo2Display.innerText = (data.spo2 || '--') + ' %';
+      
+      statusDisplay.innerText = status; 
+      riskDisplay.innerText = risk + "%";
+      riskFill.style.width = risk + "%";
+      
+      if (data.triage_horizon) document.getElementById('horizonDisplay').innerText = "Triage Horizon: " + data.triage_horizon;
+      hashDisplay.innerText = data.secure_hash || "Hashing...";
+      if (assignedHospital) destinationDisplay.innerText = assignedHospital.name + " (" + assignedHospital.type + ")";
+
+      // ML Confidence
+      if (data.ml_confidence) {
+        mlConfidenceDisplay.innerText = data.ml_confidence + "%";
+        mlConfidenceFill.style.width = data.ml_confidence + "%";
+      }
+      if (data.probabilities) {
+        document.getElementById('probStable').innerText = data.probabilities.stable;
+        document.getElementById('probWarning').innerText = data.probabilities.warning;
+        document.getElementById('probCritical').innerText = data.probabilities.critical;
+      }
+      
+      // Color theming
+      let colorClass = "text-green", borderColor = "var(--success)", bgTheme = "rgba(16, 185, 129, 0.05)", fillTheme = "var(--success)";
+      statusCard.className = "card";
+      
+      if (status === "CRITICAL" || risk > 80) { 
+        colorClass = "text-red"; borderColor = "var(--danger)"; bgTheme = "rgba(239, 68, 68, 0.08)"; fillTheme = "var(--danger)";
+        statusCard.classList.add('pulse-critical');
+        
+        if (!window.hasAlertedCritical) {
+          const div = document.createElement('div');
+          div.className = 'chat-msg agent';
+          div.innerHTML = `⚠️ <b>AI SYSTEM ALERT:</b> Patient deteriorated to CRITICAL. Pre-fetching blood and resources.`;
+          document.getElementById('chatBox').appendChild(div);
+          document.getElementById('chatBox').scrollTop = document.getElementById('chatBox').scrollHeight;
+          window.hasAlertedCritical = true;
+        }
+      } else if (status === "WARNING" || risk > 50) { 
+        colorClass = "text-yellow"; borderColor = "var(--warning)"; bgTheme = "rgba(245, 158, 11, 0.06)"; fillTheme = "var(--warning)";
+        window.hasAlertedCritical = false;
+      } else {
+        window.hasAlertedCritical = false;
+      }
+      
+      statusDisplay.className = "card-value " + colorClass;
+      statusCard.style.borderColor = borderColor; 
+      statusCard.style.backgroundColor = bgTheme;
+      riskFill.style.background = fillTheme;
+
+      // ==================== MAP UPDATE ====================
+      if (data.lat && data.lng && assignedHospital) {
+        // Show all nearby hospitals
+        if (assignedHospital.all_hospitals) {
+          assignedHospital.all_hospitals.forEach(h => {
+            const id = h.name.replace(/\s+/g, '');
+            const hIcon = h.name === assignedHospital.name 
+              ? hospitalIcon 
+              : L.icon({ iconUrl: 'https://cdn-icons-png.flaticon.com/512/8040/8040626.png', iconSize: [22, 22] });
+            if (!allHospMarkers[id]) {
+              allHospMarkers[id] = L.marker([h.lat, h.lng], { icon: hIcon }).addTo(map)
+                .bindPopup(`<div style="color:#000;font-family:'Inter';"><b>${h.name}</b><br>Type: ${h.type}<br>${h.capacity_full ? '<span style="color:red;font-weight:bold;">ER FULL</span>' : '<span style="color:#10b981;font-weight:bold;">AVAILABLE ('+h.beds_available+' beds)</span>'}</div>`);
+            } else {
+              allHospMarkers[id].setLatLng([h.lat, h.lng]).setIcon(hIcon);
+            }
+          });
+        }
+
+        // Assigned hospital marker
+        if (!hospitalMarker) {
+          map.setView([data.lat, data.lng], 14); 
+          hospitalMarker = L.marker([assignedHospital.lat, assignedHospital.lng], { icon: hospitalIcon }).addTo(map)
+            .bindPopup(`<div style="color:#000;font-family:'Inter';"><b>${assignedHospital.name}</b><br>AI Assigned: ${assignedHospital.type}</div>`).openPopup();
+        } else {
+          hospitalMarker.setLatLng([assignedHospital.lat, assignedHospital.lng])
+            .bindPopup(`<div style="color:#000;font-family:'Inter';"><b>${assignedHospital.name}</b><br>AI Assigned: ${assignedHospital.type}</div>`);
+        }
+        
+        // Ambulance marker
+        if (!ambulanceMarker) {
+          ambulanceMarker = L.marker([data.lat, data.lng], { icon: ambulanceIcon }).addTo(map)
+            .bindPopup("<div style='color:#000;'><b>🚑 Ambulance 1</b></div>");
+        } else {
+          ambulanceMarker.setLatLng([data.lat, data.lng]);
+        }
+
+        // Route polyline (NO API NEEDED)
+        const routeColor = greenWaveActive ? '#10b981' : '#3b82f6';
+        const routeWeight = greenWaveActive ? 7 : 4;
+        if (routeLine) map.removeLayer(routeLine);
+        routeLine = L.polyline(
+          [[data.lat, data.lng], [assignedHospital.lat, assignedHospital.lng]],
+          { color: routeColor, weight: routeWeight, opacity: 0.85, dashArray: '10, 8' }
+        ).addTo(map);
+      }
+    });
+
+    // ==================== CHAT ====================
+    function sendQuickMsg(msg) {
+      document.getElementById('msgInput').value = msg;
+      sendMessage();
+    }
+    
+    function sendMessage() {
+      const msg = document.getElementById('msgInput').value;
+      if (!msg.trim()) return;
+      socket.emit('send_message', { sender: 'HOSPITAL', message: msg, time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) });
+      document.getElementById('msgInput').value = '';
+    }
+    
+    socket.on('receive_message', data => {
+      const div = document.createElement('div');
+      div.className = `chat-msg ${data.sender.toLowerCase() === 'ambulance' ? 'ambulance' : 'hospital'}`;
+      div.innerHTML = `<div style="font-size: 10px; opacity: 0.7; margin-bottom: 3px; font-weight: 600;">${data.sender} • ${data.time}</div><div>${data.message}</div>`;
+      document.getElementById('chatBox').appendChild(div);
+      document.getElementById('chatBox').scrollTop = document.getElementById('chatBox').scrollHeight;
+    });
+  </script>
+</body>
+</html>

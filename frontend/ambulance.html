@@ -1,0 +1,539 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Ambulance Edge Telemetry — LifeSync</title>
+  <meta name="description" content="Real-time ambulance telemetry with live vitals, AI triage, and GPS routing.">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&family=Outfit:wght@500;700;900&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-dark: #020617;
+      --bg-panel: rgba(15, 23, 42, 0.7);
+      --glass-border: rgba(255, 255, 255, 0.1);
+      --primary: #0ea5e9;
+      --accent: #38bdf8;
+      --success: #10b981;
+      --warning: #f59e0b;
+      --danger: #ef4444;
+      --danger-glow: rgba(239, 68, 68, 0.5);
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    
+    body { 
+      background: var(--bg-dark); 
+      color: var(--text-main); 
+      font-family: 'Inter', sans-serif; 
+      height: 100vh; 
+      display: flex; 
+      padding: 12px; 
+      gap: 12px; 
+      overflow: hidden; 
+      background-image: radial-gradient(circle at top left, #0f172a, #020617); 
+    }
+    
+    .panel { 
+      background: var(--bg-panel); 
+      border-radius: 18px; 
+      padding: 20px; 
+      backdrop-filter: blur(20px); 
+      -webkit-backdrop-filter: blur(20px); 
+      border: 1px solid var(--glass-border); 
+      display: flex; 
+      flex-direction: column; 
+      gap: 14px; 
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6); 
+    }
+    
+    .left-panel { flex: 1; min-width: 340px; overflow-y: auto; } 
+    .middle-panel { 
+      flex: 1.6; 
+      border-radius: 18px; 
+      overflow: hidden; 
+      position: relative; 
+      border: 1px solid rgba(255,255,255,0.1); 
+      box-shadow: 0 8px 32px rgba(0,0,0,0.6); 
+    }
+    .right-panel { flex: 0.9; min-width: 300px; }
+    
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    
+    .card { 
+      background: linear-gradient(145deg, rgba(30, 41, 59, 0.6), rgba(15, 23, 42, 0.9)); 
+      border-radius: 14px; 
+      padding: 16px; 
+      border: 1px solid rgba(255,255,255,0.05); 
+      transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275), box-shadow 0.3s; 
+      position: relative;
+      overflow: hidden;
+    }
+    
+    .card:hover { transform: translateY(-3px); box-shadow: 0 8px 20px rgba(0,0,0,0.5); }
+    
+    .card-title { 
+      color: var(--text-muted); 
+      font-size: 11px; 
+      text-transform: uppercase; 
+      font-weight: 700; 
+      margin-bottom: 6px; 
+      letter-spacing: 1px; 
+    }
+    
+    .card-value { 
+      font-family: 'Outfit', sans-serif;
+      font-size: 52px; 
+      font-weight: 900; 
+      margin: 4px 0; 
+      text-shadow: 0 0 20px rgba(255,255,255,0.1); 
+      line-height: 1;
+    }
+    
+    .val-hr { color: var(--danger); text-shadow: 0 0 25px rgba(239, 68, 68, 0.5); } 
+    .val-spo2 { color: var(--primary); text-shadow: 0 0 25px rgba(14, 165, 233, 0.5); }
+    
+    @keyframes pulse-critical { 
+      0% { box-shadow: 0 0 0 0 var(--danger-glow); } 
+      70% { box-shadow: 0 0 0 15px rgba(239, 68, 68, 0); } 
+      100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); } 
+    }
+    .pulse-anim { animation: pulse-critical 1.5s infinite; border-color: var(--danger) !important; }
+    
+    .badge { 
+      padding: 6px 16px; 
+      border-radius: 999px; 
+      font-family: 'Outfit', sans-serif;
+      font-weight: 800; 
+      font-size: 13px; 
+      border: 2px solid transparent; 
+      box-shadow: 0 4px 12px rgba(0,0,0,0.3); 
+      transition: 0.3s; 
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+    .badge.stable { background: rgba(16, 185, 129, 0.15); color: var(--success); border-color: var(--success); text-shadow: 0 0 10px rgba(16, 185, 129, 0.5); }
+    .badge.warning { background: rgba(245, 158, 11, 0.15); color: var(--warning); border-color: var(--warning); text-shadow: 0 0 10px rgba(245, 158, 11, 0.5); }
+    .badge.critical { background: rgba(239, 68, 68, 0.15); color: var(--danger); border-color: var(--danger); text-shadow: 0 0 10px rgba(239, 68, 68, 0.5); }
+    .badge.offline { background: rgba(148, 163, 184, 0.15); color: #cbd5e1; border-color: #64748b; }
+    
+    canvas { width: 100%; height: 90px !important; background: transparent; }
+    
+    .agentic-banner { 
+      background: linear-gradient(90deg, rgba(14, 165, 233, 0.12), rgba(59, 130, 246, 0.12)); 
+      border: 1px solid rgba(14, 165, 233, 0.4); 
+      border-radius: 10px; 
+      padding: 10px 14px; 
+      font-size: 12px; 
+      color: #bae6fd; 
+      font-weight: 600; 
+      letter-spacing: 0.5px; 
+      box-shadow: 0 4px 15px rgba(14, 165, 233, 0.15);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    /* ABHA Search */
+    .abha-search {
+      display: flex; gap: 8px; align-items: center;
+    }
+    .abha-search input {
+      flex: 1; padding: 10px 14px; border-radius: 10px; background: rgba(0,0,0,0.3); 
+      color: white; border: 1px solid rgba(255,255,255,0.1); font-family: 'Inter'; 
+      font-size: 13px; transition: 0.3s;
+    }
+    .abha-search input:focus { border-color: var(--primary); outline: none; box-shadow: 0 0 10px rgba(14, 165, 233, 0.2); }
+    .abha-search button {
+      padding: 10px 16px; background: var(--primary); color: white; border: none; 
+      border-radius: 10px; font-weight: 700; cursor: pointer; transition: 0.3s; 
+      font-size: 12px; white-space: nowrap;
+      box-shadow: 0 4px 12px rgba(14, 165, 233, 0.3);
+    }
+    .abha-search button:hover { background: #0284c7; transform: translateY(-1px); }
+
+    .patient-info {
+      background: rgba(16, 185, 129, 0.08); 
+      border: 1px solid rgba(16, 185, 129, 0.3); 
+      padding: 12px 16px; 
+      border-radius: 10px; 
+      font-size: 13px; 
+      display: none;
+      animation: fadeIn 0.4s;
+    }
+    .patient-info strong { color: var(--success); font-size: 14px; display: block; margin-bottom: 4px; }
+
+    /* Map */
+    #map { width: 100%; height: 100%; background: #0a0a0a; }
+
+    .map-overlay-badge {
+      position: absolute; top: 14px; left: 14px; z-index: 1000;
+      background: rgba(15, 23, 42, 0.85); backdrop-filter: blur(10px);
+      border: 1px solid rgba(14, 165, 233, 0.4); border-radius: 10px;
+      padding: 10px 16px; color: var(--accent); font-family: 'Outfit';
+      font-weight: 700; font-size: 13px; letter-spacing: 0.5px;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+      display: flex; align-items: center; gap: 8px;
+    }
+
+    .map-overlay-badge .live-dot {
+      width: 8px; height: 8px; background: var(--danger); border-radius: 50%;
+      animation: blink 1s infinite;
+    }
+
+    @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.2; } }
+
+    /* Chat UI */
+    #chatBox { 
+      flex: 1; 
+      background: rgba(0,0,0,0.4); 
+      border-radius: 12px; 
+      padding: 14px; 
+      overflow-y: auto; 
+      display: flex; 
+      flex-direction: column; 
+      gap: 10px; 
+      border: 1px solid rgba(255,255,255,0.05); 
+      box-shadow: inset 0 4px 15px rgba(0,0,0,0.4);
+    }
+    
+    .chat-msg { 
+      font-size: 13px; 
+      padding: 10px 14px; 
+      border-radius: 12px; 
+      max-width: 85%; 
+      animation: fadeIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275); 
+      box-shadow: 0 3px 10px rgba(0,0,0,0.2); 
+      line-height: 1.4;
+    }
+    
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(8px) scale(0.95); } to { opacity: 1; transform: translateY(0) scale(1); } }
+    
+    .chat-msg.ambulance { background: linear-gradient(135deg, #3b82f6, #2563eb); align-self: flex-end; color: white; border-bottom-right-radius: 3px; }
+    .chat-msg.hospital { background: rgba(16, 185, 129, 0.15); align-self: flex-start; color: var(--text-main); border: 1px solid rgba(16, 185, 129, 0.3); border-bottom-left-radius: 3px; }
+    
+    .chat-input-row { display: flex; gap: 8px; margin-top: 8px; }
+    .chat-input-row input { 
+      flex: 1; padding: 12px 14px; border-radius: 10px; 
+      background: rgba(30, 41, 59, 0.8); color: white; 
+      border: 1px solid rgba(255,255,255,0.1); transition: 0.3s;
+      font-family: 'Inter'; font-size: 13px;
+    }
+    .chat-input-row input:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 12px rgba(14, 165, 233, 0.25); }
+    .chat-input-row button { 
+      padding: 0 20px; border-radius: 10px; border: none; 
+      background: linear-gradient(135deg, var(--primary), #2563eb); 
+      color: white; cursor: pointer; font-weight: 700; transition: 0.3s; 
+      box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4); font-size: 13px;
+    }
+    .chat-input-row button:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(59, 130, 246, 0.5); }
+    
+    .qa-btn { 
+      background: rgba(16, 185, 129, 0.12); border: 1px solid rgba(16, 185, 129, 0.4); 
+      color: #a7f3d0; padding: 7px 10px; border-radius: 8px; 
+      font-size: 11px; font-weight: 600; cursor: pointer; transition: 0.3s; 
+      flex: 1; white-space: nowrap; 
+    }
+    .qa-btn:hover { background: var(--success); color: #fff; transform: translateY(-2px); }
+
+    @keyframes pulse-dot { 0% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); } 70% { box-shadow: 0 0 0 8px rgba(16, 185, 129, 0); } 100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); } }
+
+    /* Scrollbar */
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: rgba(0,0,0,0.2); border-radius: 4px; }
+    ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 4px; }
+    ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.3); }
+
+    /* ML Confidence Badge */
+    .ml-badge {
+      font-family: 'Outfit'; font-size: 11px; font-weight: 700;
+      color: var(--accent); padding: 4px 10px; border-radius: 6px;
+      background: rgba(14, 165, 233, 0.1); border: 1px solid rgba(14, 165, 233, 0.3);
+      display: inline-block; margin-top: 4px;
+    }
+  </style>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.5/socket.io.min.js"></script>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+</head>
+<body>
+  <!-- LEFT PANEL: Vitals & ABHA -->
+  <div class="panel left-panel" id="leftPanel">
+    <div class="agentic-banner">
+      <span>⚡</span>
+      <b>AGENTIC AI ACTIVE</b> — ML-powered triage inference running
+    </div>
+    
+    <div class="card" style="padding: 12px;">
+      <div class="abha-search">
+        <input type="text" id="abhaInput" placeholder="ABHA ID (e.g., 14-1234-5678-9012)">
+        <button onclick="fetchPatient()">Lookup</button>
+      </div>
+    </div>
+    
+    <div id="patientInfoAmbulance" class="patient-info"></div>
+
+    <div style="display: flex; justify-content: space-between; align-items: flex-end;">
+      <h2 style="font-family: 'Outfit'; font-size: 20px; font-weight: 800;">🚑 Telemetry</h2>
+      <div style="text-align: right;">
+        <span id="aiStatus" class="badge stable">STABLE</span>
+        <div id="horizonDisplay" style="font-size: 11px; color: var(--warning); margin-top: 6px; font-weight: 700; text-transform: uppercase;">Horizon: Stable</div>
+        <div id="mlConfidence" class="ml-badge">ML: --% confidence</div>
+      </div>
+    </div>
+
+    <div class="grid-2">
+      <div class="card" id="hrCard" style="text-align: center;">
+        <div class="card-title">Heart Rate (BPM)</div>
+        <div class="card-value val-hr" id="hrDisplay">80</div>
+        <canvas id="hrGraph" style="margin-top: 8px;"></canvas>
+      </div>
+      <div class="card" id="spo2Card" style="text-align: center;">
+        <div class="card-title">Blood Oxygen (%)</div>
+        <div class="card-value val-spo2" id="spo2Display">98</div>
+        <canvas id="spo2Graph" style="margin-top: 8px;"></canvas>
+      </div>
+    </div>
+  </div>
+  
+  <!-- MIDDLE PANEL: Live Map -->
+  <div class="middle-panel">
+    <div class="map-overlay-badge">
+      <div class="live-dot"></div>
+      GPS TRACKING — LIVE
+    </div>
+    <div id="map"></div>
+  </div>
+
+  <!-- RIGHT PANEL: Communications -->
+  <div class="panel right-panel">
+    <h2 style="display: flex; align-items: center; gap: 8px; font-family: 'Outfit'; font-size: 18px;">
+      💬 Comms 
+      <span style="display: inline-block; width: 8px; height: 8px; background: var(--accent); border-radius: 50%; box-shadow: 0 0 10px var(--accent); animation: pulse-dot 2s infinite;"></span>
+    </h2>
+    
+    <div style="display: flex; gap: 6px; flex-wrap: wrap;">
+      <button class="qa-btn" onclick="sendQuickMsg('ETA 5 Mins.')">ETA 5</button>
+      <button class="qa-btn" onclick="sendQuickMsg('Administering Epinephrine.')">Epi Given</button>
+      <button class="qa-btn" onclick="sendQuickMsg('Patient crashing. Expedite.')" style="border-color: var(--danger); color: var(--danger); background: rgba(239, 68, 68, 0.1);">CRASHING</button>
+    </div>
+    
+    <div id="chatBox"></div>
+    
+    <div class="chat-input-row">
+      <input type="text" id="msgInput" placeholder="Secure message to hospital..." onkeypress="if(event.key === 'Enter') sendMessage()">
+      <button onclick="sendMessage()">Send</button>
+    </div>
+  </div>
+
+  <script>
+    // ==================== SOCKET.IO ====================
+    const socket = io();
+    const hrDisplay = document.getElementById('hrDisplay');
+    const spo2Display = document.getElementById('spo2Display');
+    const aiStatus = document.getElementById('aiStatus');
+    const mlConfidence = document.getElementById('mlConfidence');
+
+    // ==================== ABHA LOGIC ====================
+    function fetchPatient() {
+      const id = document.getElementById('abhaInput').value;
+      if (id) socket.emit('fetch_patient', id);
+    }
+    
+    socket.on('patient_data_received', (patient) => {
+      const div = document.getElementById('patientInfoAmbulance');
+      div.style.display = 'block';
+      div.innerHTML = `<strong>👤 Verified ABHA Identity</strong>Name: ${patient.name} &nbsp;|&nbsp; Age: ${patient.age} &nbsp;|&nbsp; Blood: <span style="color:var(--danger);font-weight:bold;">${patient.blood_group}</span><br><span style="color: #f87171; display:inline-block; margin-top:4px;">⚠️ Allergies: ${patient.allergies.join(", ")}</span>`;
+    });
+
+    socket.on('patient_not_found', () => {
+      const div = document.getElementById('patientInfoAmbulance');
+      div.style.display = 'block';
+      div.innerHTML = `<strong style="color: var(--danger);">❌ ABHA ID Not Found</strong>No patient matching this ID in the registry.`;
+    });
+
+    // ==================== VITALS SIMULATION ====================
+    let currentHR = 80, currentSpO2 = 98;
+    let currentLat = 18.5204, currentLng = 73.8567;
+    let offlineQueue = []; 
+
+    setInterval(() => {
+      currentHR += Math.floor((Math.random() - 0.4) * 6); 
+      currentSpO2 += Math.floor((Math.random() - 0.6) * 3); 
+      currentHR = Math.max(40, Math.min(160, currentHR));
+      currentSpO2 = Math.max(75, Math.min(100, currentSpO2));
+      hrDisplay.innerText = currentHR;
+      spo2Display.innerText = currentSpO2;
+    }, 2500);
+
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(pos => {
+        currentLat = pos.coords.latitude;
+        currentLng = pos.coords.longitude;
+        map.setView([currentLat, currentLng], 14);
+      });
+    }
+    setInterval(() => {
+      currentLat += (Math.random() - 0.2) * 0.0002;
+      currentLng += (Math.random() - 0.2) * 0.0002;
+    }, 3000);
+
+    // DEAD ZONE BURST CACHE
+    setInterval(() => {
+      const data = { heartRate: currentHR, spo2: currentSpO2, lat: currentLat, lng: currentLng, timestamp: Date.now() };
+      if (socket.connected) {
+        if (offlineQueue.length > 0) {
+          console.log(`📡 Bursting ${offlineQueue.length} cached packets.`);
+          offlineQueue.forEach(d => socket.emit('vitals', d));
+          offlineQueue = [];
+        }
+        socket.emit('vitals', data);
+      } else {
+        offlineQueue.push(data);
+        aiStatus.innerText = `DEAD ZONE: ${offlineQueue.length}`;
+        aiStatus.className = 'badge offline';
+      }
+    }, 2000);
+
+    // ==================== CHARTS ====================
+    Chart.defaults.color = 'rgba(255,255,255,0.4)';
+    const initChart = (id, color, min, max) => new Chart(document.getElementById(id).getContext('2d'), { 
+      type: 'line', 
+      data: { labels: Array(80).fill(''), datasets: [{ data: Array(80).fill(0), borderColor: color, borderWidth: 1.5, pointRadius: 0, tension: 0.4, fill: true, backgroundColor: color.replace('1)', '0.08)') }] }, 
+      options: { 
+        animation: false, 
+        scales: { x: { display: false }, y: { display: false, min, max } }, 
+        plugins: { legend: { display: false }, tooltip: { enabled: false } }, 
+        responsive: true, maintainAspectRatio: false,
+        layout: { padding: 0 }
+      } 
+    });
+    
+    const hrChart = initChart('hrGraph', 'rgba(239, 68, 68, 1)', -1.5, 2.5); 
+    const spo2ChartObj = initChart('spo2Graph', 'rgba(14, 165, 233, 1)', 70, 105);
+
+    const ecgPattern = [0, 0.05, 0.1, 0, -0.2, 1.8, -0.7, 0, 0, 0.1, 0.2, 0.15, 0]; 
+    let ecgIndex = 0, wavePhase = 0;
+    
+    function renderGraphs() {
+      let ecgValue = 0;
+      const beatFrames = Math.floor(300 / currentHR) * 2; 
+      if (ecgIndex < ecgPattern.length) { ecgValue = ecgPattern[ecgIndex]; ecgIndex++; } 
+      else if (Math.random() < 1 / beatFrames) { ecgIndex = 0; } 
+      else { ecgValue = (Math.random() - 0.5) * 0.05; }
+      
+      hrChart.data.datasets[0].data.push(ecgValue);
+      hrChart.data.datasets[0].data.shift(); 
+      hrChart.update('none');
+      
+      wavePhase += 0.15;
+      const spo2Wave = currentSpO2 + Math.sin(wavePhase) * 1.5 + (Math.random() - 0.5) * 0.2;
+      spo2ChartObj.data.datasets[0].data.push(spo2Wave);
+      spo2ChartObj.data.datasets[0].data.shift(); 
+      spo2ChartObj.update('none');
+    }
+    
+    setInterval(renderGraphs, 40);
+
+    // ==================== MAP (Leaflet + OpenStreetMap — FREE, NO API KEY) ====================
+    const map = L.map('map', { zoomControl: false }).setView([currentLat, currentLng], 14);
+    L.control.zoom({ position: 'bottomright' }).addTo(map);
+
+    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+      maxZoom: 19
+    }).addTo(map);
+
+    const ambulanceIcon = L.icon({ iconUrl: 'https://cdn-icons-png.flaticon.com/512/1036/1036067.png', iconSize: [32, 32], iconAnchor: [16, 32] });
+    const hospitalIcon = L.icon({ iconUrl: 'https://cdn-icons-png.flaticon.com/512/8040/8040626.png', iconSize: [36, 36], iconAnchor: [18, 36] });
+
+    let ambulanceMarker = L.marker([currentLat, currentLng], { icon: ambulanceIcon }).addTo(map).bindPopup("<b>🚑 You (Ambulance 1)</b>");
+    let hospitalMarker = null;
+    let routeLine = null;
+
+    // ==================== SOCKET UPDATE HANDLER ====================
+    socket.on('update', data => {
+      if (!socket.connected) return;
+
+      const stat = data.status || "STABLE";
+      aiStatus.innerText = "AI: " + stat; 
+      aiStatus.className = 'badge ' + stat.toLowerCase(); 
+      
+      // ML Confidence
+      if (data.ml_confidence) {
+        mlConfidence.innerText = `ML: ${data.ml_confidence}% confidence`;
+      }
+
+      const cards = document.querySelectorAll('.grid-2 .card');
+      if (stat === "CRITICAL") {
+        cards.forEach(c => c.classList.add('pulse-anim'));
+      } else {
+        cards.forEach(c => c.classList.remove('pulse-anim'));
+      }
+
+      if (data.triage_horizon) {
+        document.getElementById('horizonDisplay').innerText = "HORIZON: " + data.triage_horizon;
+      }
+
+      // Update map
+      if (data.lat && data.lng) {
+        ambulanceMarker.setLatLng([data.lat, data.lng]);
+
+        if (data.assigned_hospital) {
+          const hosp = data.assigned_hospital;
+          
+          if (!hospitalMarker) {
+            hospitalMarker = L.marker([hosp.lat, hosp.lng], { icon: hospitalIcon }).addTo(map)
+              .bindPopup(`<div style="color:#000;font-family:'Inter';"><b>${hosp.name}</b><br>Type: ${hosp.type}</div>`);
+          } else {
+            hospitalMarker.setLatLng([hosp.lat, hosp.lng])
+              .bindPopup(`<div style="color:#000;font-family:'Inter';"><b>${hosp.name}</b><br>Type: ${hosp.type}</div>`);
+          }
+
+          // Animated polyline (no API needed!)
+          if (routeLine) map.removeLayer(routeLine);
+          routeLine = L.polyline(
+            [[data.lat, data.lng], [hosp.lat, hosp.lng]],
+            { color: '#3b82f6', weight: 4, opacity: 0.8, dashArray: '12, 8', className: 'animated-route' }
+          ).addTo(map);
+
+          // Show all nearby hospitals
+          if (hosp.all_hospitals) {
+            hosp.all_hospitals.forEach(h => {
+              const key = 'hosp_' + h.name.replace(/\s+/g, '');
+              if (!window[key]) {
+                const icon = h.name === hosp.name ? hospitalIcon : L.icon({ iconUrl: 'https://cdn-icons-png.flaticon.com/512/8040/8040626.png', iconSize: [22, 22] });
+                window[key] = L.marker([h.lat, h.lng], { icon }).addTo(map)
+                  .bindPopup(`<div style="color:#000;font-family:'Inter';"><b>${h.name}</b><br>${h.capacity_full ? '<span style="color:red;">ER FULL</span>' : '<span style="color:#10b981;">AVAILABLE</span>'}</div>`);
+              }
+            });
+          }
+        }
+      }
+    });
+
+    // ==================== CHAT ====================
+    function sendQuickMsg(msg) {
+      document.getElementById('msgInput').value = msg;
+      sendMessage();
+    }
+    
+    function sendMessage() {
+      const msg = document.getElementById('msgInput').value;
+      if (!msg.trim()) return;
+      socket.emit('send_message', { sender: 'AMBULANCE', message: msg, time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) });
+      document.getElementById('msgInput').value = '';
+    }
+    
+    socket.on('receive_message', data => {
+      const div = document.createElement('div');
+      div.className = `chat-msg ${data.sender.toLowerCase() === 'ambulance' ? 'ambulance' : 'hospital'}`;
+      div.innerHTML = `<div style="font-size: 10px; opacity: 0.7; margin-bottom: 3px; font-weight:600;">${data.sender} • ${data.time}</div><div>${data.message}</div>`;
+      document.getElementById('chatBox').appendChild(div);
+      document.getElementById('chatBox').scrollTop = document.getElementById('chatBox').scrollHeight;
+    });
+  </script>
+</body>
+</html>

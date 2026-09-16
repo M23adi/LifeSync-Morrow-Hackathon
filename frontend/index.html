@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LifeSync - Agentic AI Emergency Network</title>
+    <!-- Modern Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&family=Outfit:wght@400;700;900&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-dark: #020617;
+            --bg-lighter: #0f172a;
+            --primary: #0ea5e9;
+            --primary-glow: rgba(14, 165, 233, 0.4);
+            --secondary: #10b981;
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+            --glass-bg: rgba(15, 23, 42, 0.4);
+            --glass-border: rgba(255, 255, 255, 0.08);
+        }
+        
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        body {
+            font-family: 'Inter', sans-serif;
+            background: radial-gradient(circle at top center, var(--bg-lighter), var(--bg-dark));
+            color: var(--text-main);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+            overflow-x: hidden;
+            position: relative;
+        }
+
+        /* Ambient Glow Background */
+        .ambient-glow {
+            position: absolute;
+            top: -20%;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 80vw;
+            height: 60vh;
+            background: radial-gradient(circle, var(--primary-glow) 0%, transparent 70%);
+            filter: blur(100px);
+            z-index: -1;
+            opacity: 0.5;
+            animation: pulse-glow 8s infinite alternate;
+        }
+
+        @keyframes pulse-glow {
+            0% { opacity: 0.3; transform: translateX(-50%) scale(1); }
+            100% { opacity: 0.6; transform: translateX(-50%) scale(1.1); }
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 60px;
+            position: relative;
+            z-index: 1;
+        }
+
+        .badge {
+            display: inline-block;
+            background: rgba(14, 165, 233, 0.1);
+            border: 1px solid var(--primary);
+            color: #7dd3fc;
+            font-size: 13px;
+            font-weight: 700;
+            padding: 8px 20px;
+            border-radius: 999px;
+            margin-bottom: 24px;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+            box-shadow: 0 0 15px rgba(14, 165, 233, 0.2);
+            backdrop-filter: blur(10px);
+        }
+
+        h1 {
+            font-family: 'Outfit', sans-serif;
+            font-size: 56px;
+            font-weight: 900;
+            background: linear-gradient(135deg, #ffffff 30%, #94a3b8 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 16px;
+            letter-spacing: -1px;
+            line-height: 1.1;
+        }
+
+        p.subtitle {
+            color: var(--text-muted);
+            font-size: 18px;
+            max-width: 650px;
+            margin: 0 auto;
+            line-height: 1.6;
+            font-weight: 300;
+        }
+
+        .cards-container {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 30px;
+            max-width: 1100px;
+            width: 100%;
+            z-index: 1;
+        }
+
+        .card {
+            background: var(--glass-bg);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid var(--glass-border);
+            border-radius: 24px;
+            padding: 40px 30px;
+            text-decoration: none;
+            color: inherit;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+            position: relative;
+            overflow: hidden;
+            group: hover;
+        }
+
+        /* Hover Glare Effect */
+        .card::before {
+            content: '';
+            position: absolute;
+            top: 0; left: -100%; width: 50%; height: 100%;
+            background: linear-gradient(to right, transparent, rgba(255,255,255,0.05), transparent);
+            transform: skewX(-25deg);
+            transition: 0.5s;
+        }
+        
+        .card:hover::before {
+            left: 150%;
+        }
+
+        .card:hover {
+            transform: translateY(-10px);
+            border-color: rgba(14, 165, 233, 0.5);
+            box-shadow: 0 20px 50px rgba(14, 165, 233, 0.2);
+            background: rgba(15, 23, 42, 0.7);
+        }
+
+        .icon {
+            font-size: 48px;
+            margin-bottom: 24px;
+            display: inline-block;
+            transition: transform 0.3s ease;
+        }
+
+        .card:hover .icon {
+            transform: scale(1.1);
+        }
+
+        .card h2 {
+            font-family: 'Outfit', sans-serif;
+            font-size: 24px;
+            font-weight: 700;
+            margin-bottom: 12px;
+            color: var(--text-main);
+        }
+
+        .card p {
+            color: var(--text-muted);
+            font-size: 15px;
+            line-height: 1.6;
+            margin-bottom: 30px;
+        }
+
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 15px;
+            font-weight: 600;
+            color: var(--primary);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            transition: all 0.3s ease;
+        }
+
+        .btn-icon {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 30px;
+            height: 30px;
+            background: rgba(14, 165, 233, 0.1);
+            border-radius: 50%;
+            transition: all 0.3s ease;
+        }
+
+        .card:hover .btn-icon {
+            background: var(--primary);
+            color: #020617;
+            transform: translateX(5px);
+        }
+
+        .status-bar {
+            margin-top: 60px;
+            padding: 12px 30px;
+            background: var(--glass-bg);
+            border: 1px solid var(--glass-border);
+            border-radius: 999px;
+            font-size: 14px;
+            font-weight: 600;
+            color: #cbd5e1;
+            display: flex;
+            gap: 24px;
+            align-items: center;
+            backdrop-filter: blur(10px);
+            z-index: 1;
+        }
+
+        .dot {
+            width: 10px;
+            height: 10px;
+            background: var(--secondary);
+            border-radius: 50%;
+            display: inline-block;
+            box-shadow: 0 0 12px var(--secondary);
+            animation: pulse-dot 2s infinite;
+        }
+
+        @keyframes pulse-dot {
+            0% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); }
+            70% { box-shadow: 0 0 0 10px rgba(16, 185, 129, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+        }
+
+        .team-footer {
+            margin-top: 20px;
+            font-size: 12px;
+            color: #475569;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+        }
+
+        .team-footer span {
+            color: var(--primary);
+            font-weight: 700;
+        }
+    </style>
+</head>
+<body>
+    <div class="ambient-glow"></div>
+
+    <div class="header">
+        <div class="badge">⚡ Autonomous Emergency Connectivity</div>
+        <h1>LifeSync Platform</h1>
+        <p class="subtitle">AI-driven real-time clinical triage, ABHA identity verification, and autonomous hospital routing. Closing the information blindspot.</p>
+    </div>
+
+    <div class="cards-container">
+        <a href="/ambulance" class="card" target="_blank">
+            <div>
+                <div class="icon">🚑</div>
+                <h2>Ambulance Edge</h2>
+                <p>Simulate live patient vitals, real-time ECG/SpO2 waveforms, ABHA registry lookup, and dead-zone burst cache resilience.</p>
+            </div>
+            <div class="btn">
+                Launch Ambulance <span class="btn-icon">&rarr;</span>
+            </div>
+        </a>
+
+        <a href="/dashboard" class="card" target="_blank">
+            <div>
+                <div class="icon">🏥</div>
+                <h2>Hospital Command</h2>
+                <p>Live global map with AI route dispatch, multi-agent handshake negotiation, trauma prep alerts, and SHA-256 cryptographic vault.</p>
+            </div>
+            <div class="btn">
+                Launch Dashboard <span class="btn-icon">&rarr;</span>
+            </div>
+        </a>
+
+        <a href="/docs" class="card" target="_blank">
+            <div>
+                <div class="icon">🔌</div>
+                <h2>API & Analytics</h2>
+                <p>Inspect backend endpoints: real-time triage scoring (Deterioration Index), predictive horizons, and ABHA lookup data pipelines.</p>
+            </div>
+            <div class="btn">
+                View Swagger <span class="btn-icon">&rarr;</span>
+            </div>
+        </a>
+    </div>
+
+    <div class="status-bar">
+        <span><span class="dot"></span> Agentic Backend Online</span>
+        <span>WebSocket: Active</span>
+        <span>Port: 8000</span>
+    </div>
+
+    <div class="team-footer">
+        Developed by <span>Commitment_Issues</span>
+    </div>
+</body>
+</html>
