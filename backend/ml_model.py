@@ -1,22 +1,6 @@
-"""
-LifeSync ML Engine — Clinical Deterioration Prediction Model
-=============================================================
-A GradientBoostingClassifier trained on synthetic clinical vitals data
-to predict patient deterioration status (STABLE / WARNING / CRITICAL).
-
-Architecture:
-  - Features: heart_rate, spo2, systolic_bp (derived), respiratory_rate (derived)
-  - Target: triage_label (0=STABLE, 1=WARNING, 2=CRITICAL)
-  - Model: sklearn.ensemble.GradientBoostingClassifier
-  - Training: 5000 synthetic samples generated from clinical distributions
-  - Evaluation: 5-fold stratified cross-validation, confusion matrix, classification report
-
-Production Features:
-  - Model persistence via joblib (cached to disk, reloaded on restart)
-  - Model versioning via SHA-256 hash of hyperparameters
-  - Per-class precision/recall/F1 metrics
-  - Prediction counter for runtime analytics
-"""
+# ml_model.py
+# Uses GradientBoostingClassifier to predict patient status
+# 0 = STABLE, 1 = WARNING, 2 = CRITICAL
 
 import hashlib
 import json
@@ -43,17 +27,7 @@ MODEL_PATH = MODEL_DIR / "lifesync_model.joblib"
 
 
 class DeteriorationModel:
-    """
-    Real-time clinical deterioration prediction engine.
-    Trained on synthetic vitals data modeled after clinical distributions.
-
-    Features:
-      - 5-fold stratified cross-validation
-      - Confusion matrix & classification report
-      - Model persistence (joblib)
-      - Model versioning (SHA-256)
-      - Prediction analytics counter
-    """
+    # simple ML model for the hackathon project
 
     LABELS = {0: "STABLE", 1: "WARNING", 2: "CRITICAL"}
     HYPERPARAMS = {
@@ -113,13 +87,13 @@ class DeteriorationModel:
                     self.cv_std = cached.get("cv_std", 0.0)
                     self.per_class_f1 = cached.get("per_class_f1", {})
                     self.is_ready = True
-                    print(f"[ML ENGINE] [OK] Loaded cached model v{self.model_version} | Accuracy: {self.accuracy:.2%}")
+                    print(f"Loaded cached model. Accuracy: {self.accuracy:.2%}")
                     return True
                 else:
-                    print(f"[ML ENGINE] [WARN] Cached model version mismatch. Retraining...")
+                    print(f"Model hash mismatch, training again...")
                     return False
         except Exception as e:
-            print(f"[ML ENGINE] [WARN] Could not load cached model: {e}")
+            print(f"Couldn't load model: {e}")
         return False
 
     def _save_model(self):
@@ -283,10 +257,8 @@ class DeteriorationModel:
         self.training_time_ms = round((time.time() - start) * 1000, 1)
         self.is_ready = True
 
-        print(f"\n[ML ENGINE] [OK] Model trained in {self.training_time_ms}ms | Accuracy: {self.accuracy:.2%}")
-        print(f"[ML ENGINE] Feature importances: {self.feature_importances}")
-        print(f"[ML ENGINE] Per-class F1: {self.per_class_f1}")
-        print(f"[ML ENGINE] Model version: {self.model_version}")
+        print(f"\nModel trained in {self.training_time_ms}ms | Accuracy: {self.accuracy:.2%}")
+        print(f"Feature importances: {self.feature_importances}")
 
         # Save to disk for next restart
         self._save_model()

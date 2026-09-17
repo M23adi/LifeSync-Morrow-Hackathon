@@ -1,13 +1,6 @@
 """
-LifeSync Agentic AI Backend
-============================
-FastAPI + Socket.IO server providing:
-  - ML-powered real-time deterioration prediction
-  - Multi-agent hospital routing with handshake protocol
-  - ABHA patient identity registry
-  - SHA-256 cryptographic audit ledger
-  - WebSocket vitals streaming
-  - Comprehensive ML evaluation endpoints
+LifeSync Backend Server
+FastAPI + Socket.IO server handling ML predictions and routing.
 """
 
 import hashlib
@@ -44,15 +37,15 @@ DATA_DIR.mkdir(exist_ok=True)
 # --- ML Model ---
 from ml_model import DeteriorationModel
 
-print("[BOOT] Initializing ML Deterioration Engine...")
+print("Initializing ML model...")
 ml_engine = DeteriorationModel()
 SERVER_START_TIME = time.time()
 
-# --- Socket.IO Async Server & FastAPI App ---
+# Setup socketio and fastapi
 sio = socketio.AsyncServer(async_mode="asgi", cors_allowed_origins="*")
 app = FastAPI(
-    title="LifeSync Agentic AI Platform",
-    description="ML-powered emergency triage, agentic hospital routing, and real-time vitals monitoring.",
+    title="LifeSync API",
+    description="Emergency triage and routing API",
     version="2.0.0",
 )
 
@@ -191,19 +184,11 @@ def _rotate_ledger(ledger_path):
 
 
 def compute_risk(vitals: Vitals):
-    """
-    Full agentic pipeline:
-    1. PERCEIVE — Receive vitals from ambulance edge
-    2. REASON  — ML model predicts deterioration status
-    3. ACT     — Multi-agent handshake selects optimal hospital
-    4. SECURE  — SHA-256 hash locks the transaction
-    """
-
-    # --- Validate inputs ---
+    # check inputs
     hr = max(20, min(250, vitals.heartRate))
     spo2 = max(50, min(100, vitals.spo2))
 
-    # --- REASON: ML Inference ---
+    # run ML inference
     ml_result = ml_engine.predict(hr, spo2)
     status = ml_result["status"]
     total_risk = ml_result["risk_score"]
@@ -211,17 +196,16 @@ def compute_risk(vitals: Vitals):
     triage_horizon = ml_result["triage_horizon"]
     probabilities = ml_result.get("probabilities")
 
-    # --- ACT: Multi-Agent Hospital Routing ---
+    # routing logic
     local_hospitals = get_hospitals_near(vitals.lat, vitals.lng)
 
-    # Filter: critical patients need TRAUMA facilities
+    # only trauma centers for critical patients
     valid_hospitals = [
-        h
-        for h in local_hospitals
+        h for h in local_hospitals
         if not (status == "CRITICAL" and h["type"] != "TRAUMA")
     ]
 
-    # Sort by distance
+    # sort hospitals by distance
     valid_hospitals.sort(
         key=lambda h: calculate_distance(vitals.lat, vitals.lng, h["lat"], h["lng"])
     )
@@ -229,7 +213,6 @@ def compute_risk(vitals: Vitals):
     best_hospital = None
     handshake_log = []
 
-    # Multi-Agent Handshake Protocol
     for h in valid_hospitals:
         distance = calculate_distance(vitals.lat, vitals.lng, h["lat"], h["lng"])
         eta = estimate_eta(distance)
@@ -241,21 +224,16 @@ def compute_risk(vitals: Vitals):
             "eta": eta,
         }
 
-        print(f"[AGENT HANDSHAKE] Pinging {h['name']} Agent for clearance...")
-        print(
-            f"[AGENT HANDSHAKE] Requesting permission for {status} patient. Needs {h['type']} resources."
-        )
+        print(f"Checking availability at {h['name']} for {status} patient...")
 
         if h.get("capacity_full"):
-            print(
-                f"[AGENT HANDSHAKE] DENIED by {h['name']}. Reason: ER at capacity. Renegotiating..."
-            )
+            print(f"-> DENIED by {h['name']} (ER full). Trying next...")
             log_entry["result"] = "DENIED"
             log_entry["reason"] = "ER at capacity"
             handshake_log.append(log_entry)
             continue
         else:
-            print(f"[AGENT HANDSHAKE] GRANTED by {h['name']}. Route secured.\n")
+            print(f"-> GRANTED by {h['name']}. Route locked.\n")
             log_entry["result"] = "GRANTED"
             handshake_log.append(log_entry)
             best_hospital = h
@@ -270,21 +248,16 @@ def compute_risk(vitals: Vitals):
         )
         best_hospital["eta"] = estimate_eta(best_hospital["distance_km"])
 
-    # Blood Bank Pre-Fetch Agent
+    # fetch blood type if critical
     if status in ("CRITICAL", "WARNING"):
-        print(
-            f"[BLOOD AGENT] Deterioration Detected. Cross-referencing ABHA Registry..."
-        )
-        print(f"[BLOOD AGENT] Patient Blood Type: O- (O Negative) identified.")
-        print(
-            f"[BLOOD AGENT] Securing 2 units at {best_hospital['name']} Blood Bank prior to arrival...\n"
-        )
+        print("Patient is deteriorating. Pre-fetching blood type details...")
+        print("Found Blood Type: O- (O Negative)")
+        print(f"Alerting {best_hospital['name']} blood bank to prepare 2 units.\n")
 
-    # Inject all hospitals into the payload for map rendering
     best_hospital_payload = best_hospital.copy()
     best_hospital_payload["all_hospitals"] = local_hospitals
 
-    # --- SECURE: SHA-256 Cryptographic Vault ---
+    # generate secure hash for ledger
     data_string = json.dumps(
         {
             "hr": vitals.heartRate,

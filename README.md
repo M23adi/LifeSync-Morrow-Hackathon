@@ -1,4 +1,4 @@
-# 🚑 LifeSync — Agentic AI Emergency Network
+# LifeSync — Emergency Network
 
 > **Team Commitment_Issues** | Morrow 1.0 Hackathon — Round 2 Submission
 
@@ -10,11 +10,10 @@
 
 ---
 
-## 📌 Problem Statement
+## Problem Statement
+Every year, ~1.35 million people die in road accidents globally (WHO, 2023). In India alone, over 1.7 lakh lives are lost annually — not always from the injury itself, but from the "Golden Hour" information blindspot. Ambulances don't know which ER is full, hospitals don't know what's incoming, and critical patient data is lost in transit.
 
-**Every year, ~1.35 million people die in road accidents globally (WHO, 2023). In India alone, over 1.7 lakh lives are lost annually — not always from the injury itself, but from the "Golden Hour" information blindspot:** ambulances don't know which ER is full, hospitals don't know what's incoming, and critical patient data is lost in transit.
-
-LifeSync eliminates this gap with an **Agentic AI architecture** that autonomously perceives patient vitals, reasons about clinical deterioration using ML, acts by routing to the optimal hospital via multi-agent negotiation, and secures every transaction on a cryptographic ledger.
+LifeSync eliminates this gap with an AI architecture that perceives patient vitals, reasons about clinical deterioration using ML, routes to the optimal hospital via multi-agent negotiation, and secures every transaction on a cryptographic ledger.
 
 ---
 
@@ -48,20 +47,12 @@ LifeSync eliminates this gap with an **Agentic AI architecture** that autonomous
 
 ---
 
-## 🤖 Machine Learning Model
-
-### Model Specification
-
-| Property | Value |
-|----------|-------|
-| **Algorithm** | `GradientBoostingClassifier` (scikit-learn) |
-| **Type** | Supervised multi-class classification |
-| **Test Accuracy** | **97.0%** on held-out test set (80/20 split, stratified) |
-| **Cross-Validation** | **97.54% ± 0.44%** (5-fold stratified K-fold) |
-| **Training Samples** | 5,000 synthetic clinical records |
-| **Inference Latency** | < 5ms per prediction |
-| **Model Persistence** | Cached to disk via `joblib` (instant reload on restart) |
-| **Model Versioning** | SHA-256 hash of hyperparameters (`fe48607b26d9`) |
+## ML Model
+- **Algorithm**: GradientBoostingClassifier (scikit-learn)
+- **Type**: Supervised multi-class classification
+- **Test Accuracy**: ~97.0% on held-out test set
+- **Training Samples**: 5,000 synthetic clinical records
+- **Inference Latency**: < 5ms per prediction
 
 ### Features
 
@@ -195,18 +186,13 @@ curl http://localhost:8000/ml-evaluation
 
 ---
 
-## 🏗️ Tech Stack
-
-| Layer | Technology | Purpose |
-|-------|-----------|---------| 
-| **Backend** | Python 3.12 + FastAPI | REST API, WebSocket handling, ML inference |
-| **ML Engine** | scikit-learn + NumPy + joblib | GradientBoosting clinical deterioration model with persistence |
-| **Real-time** | Socket.IO (python-socketio) | Bi-directional vitals streaming & chat |
-| **Frontend** | HTML5 + CSS3 + Vanilla JS | Premium glassmorphism dark-mode UI with particle animations |
-| **Maps** | Leaflet.js + OpenStreetMap | Free, API-key-free GPS tracking & routing |
-| **Charts** | Chart.js | Real-time ECG & SpO2 waveform rendering |
-| **Security** | SHA-256 (hashlib) | Cryptographic audit ledger with rotation |
-| **Deployment** | Render | Cloud hosting with health checks |
+### Tech Stack
+- **Backend**: Python 3.12 + FastAPI
+- **ML Engine**: scikit-learn + NumPy + joblib
+- **Real-time**: Socket.IO (python-socketio)
+- **Frontend**: HTML5 + CSS3 + Vanilla JS
+- **Maps**: Leaflet.js + OpenStreetMap (No API keys needed)
+- **Security**: SHA-256 (hashlib) for ledger
 
 ---
 
@@ -244,11 +230,11 @@ curl http://localhost:8000/ml-evaluation
 
 ### Multi-Agent Handshake Protocol
 When the AI determines a patient needs a specific hospital type:
-1. It queries the nearest matching hospital's "agent"
-2. If that hospital is at capacity → **DENIED** → renegotiates with next-nearest
-3. If accepted → **GRANTED** → route is locked and displayed on both maps
-4. Blood Bank Agent pre-fetches required blood type at the destination hospital
-5. ETA is calculated based on Haversine distance and average ambulance speed
+1. It checks the nearest matching hospital's availability
+2. If full -> DENIED -> checks next nearest
+3. If accepted -> GRANTED -> route is locked
+4. Blood Bank pre-fetches required blood type at the destination hospital
+5. ETA is calculated based on Haversine distance
 
 ---
 
