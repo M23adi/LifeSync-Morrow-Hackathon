@@ -56,10 +56,12 @@ LifeSync eliminates this gap with an **Agentic AI architecture** that autonomous
 |----------|-------|
 | **Algorithm** | `GradientBoostingClassifier` (scikit-learn) |
 | **Type** | Supervised multi-class classification |
-| **Accuracy** | **98.9%** on held-out test set (80/20 split, stratified) |
+| **Test Accuracy** | **97.0%** on held-out test set (80/20 split, stratified) |
+| **Cross-Validation** | **97.54% ± 0.44%** (5-fold stratified K-fold) |
 | **Training Samples** | 5,000 synthetic clinical records |
 | **Inference Latency** | < 5ms per prediction |
-| **Training Time** | ~2.5 seconds at server startup |
+| **Model Persistence** | Cached to disk via `joblib` (instant reload on restart) |
+| **Model Versioning** | SHA-256 hash of hyperparameters (`fe48607b26d9`) |
 
 ### Features
 
@@ -78,6 +80,36 @@ LifeSync eliminates this gap with an **Agentic AI architecture** that autonomous
 | **WARNING** | 1 | Vitals trending abnormal, close monitoring required |
 | **CRITICAL** | 2 | Life-threatening deterioration, immediate triage needed |
 
+### Model Evaluation
+
+#### Cross-Validation (5-Fold Stratified)
+
+| Fold | Accuracy |
+|------|----------|
+| Fold 1 | 97.7% |
+| Fold 2 | 97.0% |
+| Fold 3 | 97.4% |
+| Fold 4 | 97.3% |
+| Fold 5 | 98.3% |
+| **Mean ± Std** | **97.54% ± 0.44%** |
+
+#### Confusion Matrix
+
+|  | Predicted STABLE | Predicted WARNING | Predicted CRITICAL |
+|--|:---:|:---:|:---:|
+| **Actual STABLE** | 592 | 8 | 0 |
+| **Actual WARNING** | 9 | 233 | 8 |
+| **Actual CRITICAL** | 0 | 5 | 145 |
+
+#### Per-Class Metrics
+
+| Class | Precision | Recall | F1-Score | Support |
+|-------|-----------|--------|----------|---------|
+| **STABLE** | 0.99 | 0.99 | 0.99 | 600 |
+| **WARNING** | 0.95 | 0.93 | 0.94 | 250 |
+| **CRITICAL** | 0.95 | 0.97 | 0.96 | 150 |
+| **Weighted Avg** | 0.97 | 0.97 | 0.97 | 1000 |
+
 ### Training Dataset
 
 The model is trained on **synthetically generated clinical data** modeled after the **Modified Early Warning Score (MEWS)** clinical framework, which is the gold standard for in-hospital deterioration detection.
@@ -85,13 +117,15 @@ The model is trained on **synthetically generated clinical data** modeled after 
 **Data Generation Strategy:**
 
 ```
-STABLE (60%):   HR ~ N(75, 8)    SpO2 ~ N(97, 1.2)   SBP ~ N(120, 10)   RR ~ N(16, 2)
-WARNING (25%):  HR ~ N(105, 12)  SpO2 ~ N(93, 2)     SBP ~ N(100, 15)   RR ~ N(22, 3)
-CRITICAL (15%): HR ~ N(135, 15)  SpO2 ~ N(85, 4)     SBP ~ N(80, 20)    RR ~ N(30, 5)
-                or HR ~ N(42, 5)  (bradycardia variant)
+STABLE   (60%):  HR ~ N(75, 8)    SpO2 ~ N(97, 1.2)   SBP ~ N(120, 10)   RR ~ N(16, 2)
+WARNING  (25%):  HR ~ N(105, 12)  SpO2 ~ N(93, 2)     SBP ~ N(100, 15)   RR ~ N(22, 3)
+  + Low boundary:  HR ~ N(92, 6)   SpO2 ~ N(95, 1.5)  SBP ~ N(108, 10)   RR ~ N(19, 2)
+  + High boundary: HR ~ N(118, 8)  SpO2 ~ N(90, 1.5)  SBP ~ N(92, 12)    RR ~ N(25, 3)
+CRITICAL (15%):  HR ~ N(135, 15)  SpO2 ~ N(85, 4)     SBP ~ N(80, 20)    RR ~ N(30, 5)
+                 or HR ~ N(42, 5)  (bradycardia variant)
 ```
 
-> **Why synthetic data?** In a production system, this model would be trained on real ICU datasets (e.g., MIMIC-III). For this prototype, we use clinically-representative synthetic distributions to demonstrate the ML pipeline architecture without requiring access to restricted medical datasets. The distributions are derived from published MEWS threshold literature.
+> **Why synthetic data?** In a production system, this model would be trained on real ICU datasets (e.g., MIMIC-III). For this prototype, we use clinically-representative synthetic distributions to demonstrate the ML pipeline architecture without requiring access to restricted medical datasets. The distributions are derived from published MEWS threshold literature. Boundary samples are included in the WARNING class to improve transition-zone predictions.
 
 ### Hyperparameters
 
@@ -110,16 +144,25 @@ GradientBoostingClassifier(
 
 | Feature | Importance | Interpretation |
 |---------|-----------|----------------|
-| `spo2` | **59.9%** | Most critical — oxygen saturation is the primary predictor of clinical deterioration |
-| `heart_rate` | **29.5%** | Second most important — tachycardia/bradycardia signals cardiac distress |
-| `respiratory_rate` | **9.1%** | Compensatory breathing rate changes |
-| `systolic_bp` | **1.5%** | Derived feature, lower independent signal |
+| `spo2` | **58.6%** | Most critical — oxygen saturation is the primary predictor of clinical deterioration |
+| `heart_rate` | **31.2%** | Second most important — tachycardia/bradycardia signals cardiac distress |
+| `respiratory_rate` | **7.8%** | Compensatory breathing rate changes |
+| `systolic_bp` | **2.5%** | Derived feature, lower independent signal |
+
+### Model Persistence & Versioning
+
+The model implements **production-grade ML lifecycle management**:
+
+1. **First run**: Model trains from scratch, saves to `data/lifesync_model.joblib`
+2. **Subsequent runs**: Model loads from disk cache (instant startup, no retraining)
+3. **Version tracking**: SHA-256 hash of hyperparameters ensures cache invalidation on config changes
+4. **Evaluation caching**: Confusion matrix, classification report, and CV scores are persisted alongside the model
 
 ### Model API
 
-The ML model exposes its predictions via the `/predict` POST endpoint and its metadata via `/ml-status` GET endpoint.
+The ML model exposes its predictions via REST and WebSocket:
 
-**Example — Predict deterioration:**
+**Predict deterioration:**
 ```bash
 curl -X POST http://localhost:8000/predict \
   -H "Content-Type: application/json" \
@@ -135,27 +178,19 @@ curl -X POST http://localhost:8000/predict \
   "assigned_hospital": {"name": "Advanced Trauma Institute", "type": "TRAUMA"},
   "triage_horizon": "IMMEDIATE (0 mins)",
   "ml_confidence": 100.0,
-  "probabilities": {"stable": 0.0, "warning": 0.0, "critical": 100.0}
+  "probabilities": {"stable": 0.0, "warning": 0.0, "critical": 100.0},
+  "handshake_log": [...]
 }
 ```
 
-**Example — Model metadata:**
+**Model metadata:**
 ```bash
 curl http://localhost:8000/ml-status
 ```
 
-**Response:**
-```json
-{
-  "model_type": "GradientBoostingClassifier",
-  "accuracy": 98.9,
-  "training_samples": 5000,
-  "features": ["heart_rate", "spo2", "systolic_bp (derived)", "respiratory_rate (derived)"],
-  "feature_importances": {"heart_rate": 0.2949, "spo2": 0.5992, "systolic_bp": 0.0149, "respiratory_rate": 0.091},
-  "training_time_ms": 2489.4,
-  "is_ready": true,
-  "classes": ["STABLE", "WARNING", "CRITICAL"]
-}
+**Full evaluation report (confusion matrix, CV, classification report):**
+```bash
+curl http://localhost:8000/ml-evaluation
 ```
 
 ---
@@ -163,14 +198,14 @@ curl http://localhost:8000/ml-status
 ## 🏗️ Tech Stack
 
 | Layer | Technology | Purpose |
-|-------|-----------|---------|
+|-------|-----------|---------| 
 | **Backend** | Python 3.12 + FastAPI | REST API, WebSocket handling, ML inference |
-| **ML Engine** | scikit-learn + NumPy | GradientBoosting clinical deterioration model |
+| **ML Engine** | scikit-learn + NumPy + joblib | GradientBoosting clinical deterioration model with persistence |
 | **Real-time** | Socket.IO (python-socketio) | Bi-directional vitals streaming & chat |
-| **Frontend** | HTML5 + CSS3 + Vanilla JS | Premium glassmorphism dark-mode UI |
+| **Frontend** | HTML5 + CSS3 + Vanilla JS | Premium glassmorphism dark-mode UI with particle animations |
 | **Maps** | Leaflet.js + OpenStreetMap | Free, API-key-free GPS tracking & routing |
 | **Charts** | Chart.js | Real-time ECG & SpO2 waveform rendering |
-| **Security** | SHA-256 (hashlib) | Cryptographic audit ledger |
+| **Security** | SHA-256 (hashlib) | Cryptographic audit ledger with rotation |
 | **Deployment** | Render | Cloud hosting with health checks |
 
 ---
@@ -180,19 +215,32 @@ curl http://localhost:8000/ml-status
 ### Ambulance Edge (`/ambulance`)
 - **Live ECG/SpO2 Waveforms** — Real-time Chart.js rendered clinical waveforms
 - **GPS Map Tracking** — Leaflet map with animated route polyline to assigned hospital (OpenStreetMap tiles, zero API keys)
-- **ABHA Identity Lookup** — Instant patient registry query (name, age, blood group, allergies)
+- **ABHA Identity Lookup** — Instant patient registry query (name, age, blood group, allergies, medical history)
 - **Dead-Zone Burst Cache** — Offline-resilient queue that bursts cached vitals when connectivity resumes
 - **ML Confidence Badge** — Live model confidence percentage display
+- **Deterioration Index Gauge** — Visual risk score progress bar with probability breakdown (Stable/Warning/Critical %)
+- **Vitals History Timeline** — Rolling log of last 10 readings with timestamps and status
+- **Connection Status Indicator** — Real-time WebSocket connection state (Connected/Disconnected)
+- **ETA Display** — Estimated time of arrival to assigned hospital
 - **Agent-Assisted Chat** — Encrypted communication channel with quick-action macros
 
 ### Hospital Command (`/dashboard`)
 - **Agentic Command Center** — 4-phase pipeline visualization (Perceive → Reason → Act → Secure)
 - **ML Deterioration Gauge** — Risk score progress bar with probability breakdown (Stable/Warning/Critical)
-- **Live Ambulance Tracking** — Real-time GPS marker on CartoDB Dark Matter map
+- **Live Ambulance Tracking** — Real-time GPS marker on OpenStreetMap
 - **Multi-Hospital Markers** — All nearby hospitals shown with capacity status and bed counts
+- **Agent Handshake Log** — Live log showing GRANTED/DENIED decisions per hospital with distance and ETA
+- **ETA Badge** — Estimated arrival time displayed on map overlay
+- **Bed Availability Display** — Available beds shown at assigned hospital
 - **Green Wave Traffic Preemption** — Toggle button simulating traffic signal override for ambulance corridor
 - **SHA-256 Vault** — Live cryptographic hash of every vitals transaction
 - **AI System Alerts** — Automatic chat alerts when patient deteriorates to CRITICAL
+
+### Landing Page (`/`)
+- **Animated Particle Network** — Interactive background with particle connections
+- **Pipeline Visualization** — 4-step Perceive → Reason → Act → Secure walkthrough
+- **Live ML Stats** — Real-time fetch from `/ml-status` showing accuracy, CV score, training time, model version
+- **Responsive Design** — Mobile-friendly layout with adaptive grid
 
 ### Multi-Agent Handshake Protocol
 When the AI determines a patient needs a specific hospital type:
@@ -200,6 +248,7 @@ When the AI determines a patient needs a specific hospital type:
 2. If that hospital is at capacity → **DENIED** → renegotiates with next-nearest
 3. If accepted → **GRANTED** → route is locked and displayed on both maps
 4. Blood Bank Agent pre-fetches required blood type at the destination hospital
+5. ETA is calculated based on Haversine distance and average ambulance speed
 
 ---
 
@@ -215,16 +264,16 @@ morrow/
 │
 ├── backend/
 │   ├── main.py                 # FastAPI + Socket.IO server + agentic pipeline
-│   ├── ml_model.py             # GradientBoosting deterioration prediction model
-│   └── requirements.txt        # Backend-specific dependencies
+│   └── ml_model.py             # GradientBoosting deterioration model + evaluation
 │
 ├── frontend/
-│   ├── index.html              # Landing page (glassmorphism dark-mode)
-│   ├── ambulance.html          # Ambulance telemetry + map + chat
-│   └── dashboard.html          # Hospital command center + map + ML gauge
+│   ├── index.html              # Landing page (particles, pipeline visual, ML stats)
+│   ├── ambulance.html          # Ambulance telemetry + map + chat + vitals history
+│   └── dashboard.html          # Hospital command center + map + ML gauge + agent log
 │
 └── data/
-    └── secure_ledger.jsonl     # Immutable SHA-256 audit trail (auto-generated)
+    ├── secure_ledger.jsonl     # Immutable SHA-256 audit trail (auto-generated)
+    └── lifesync_model.joblib   # Cached trained ML model (auto-generated)
 ```
 
 ---
@@ -259,15 +308,30 @@ python run.py
 | 🏥 Hospital Command | [http://localhost:8000/dashboard](http://localhost:8000/dashboard) |
 | 📖 Swagger API Docs | [http://localhost:8000/docs](http://localhost:8000/docs) |
 | 🧠 ML Model Status | [http://localhost:8000/ml-status](http://localhost:8000/ml-status) |
+| 📊 ML Evaluation | [http://localhost:8000/ml-evaluation](http://localhost:8000/ml-evaluation) |
+| 📜 Audit Ledger | [http://localhost:8000/ledger](http://localhost:8000/ledger) |
 | 💚 Health Check | [http://localhost:8000/health](http://localhost:8000/health) |
 
 ### Demo Workflow
 1. Open `/ambulance` and `/dashboard` in **two separate browser tabs**
 2. On the ambulance page, enter ABHA ID: `14-1234-5678-9012` and click **Lookup**
 3. Watch the vitals stream in real-time on both screens
-4. Send messages between ambulance and hospital using the chat
-5. Observe the AI status badge change as vitals fluctuate (STABLE → WARNING → CRITICAL)
-6. On the dashboard, click **Activate Green Wave** to simulate traffic preemption
+4. Observe the **Deterioration Index gauge** change as vitals fluctuate
+5. See the **ML confidence** percentage and **probability breakdown** (S/W/C %)
+6. Watch the **Agent Handshake Log** on the dashboard showing GRANTED/DENIED decisions
+7. Send messages between ambulance and hospital using the chat
+8. On the dashboard, click **Activate Green Wave** to simulate traffic preemption
+9. Check `/ml-evaluation` to see the full confusion matrix and classification report
+
+### Available ABHA IDs for Testing
+
+| ABHA ID | Patient | Blood Group |
+|---------|---------|-------------|
+| `14-1234-5678-9012` | Rajesh Kumar (45) | O+ |
+| `14-9876-5432-1098` | Priya Sharma (32) | A- |
+| `14-5555-1234-7890` | Amit Verma (58) | B+ |
+| `14-7777-8888-9999` | Ananya Patel (27) | AB+ |
+| `14-3333-4444-5555` | Vikram Singh (63) | O- |
 
 ---
 
@@ -275,21 +339,23 @@ python run.py
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| `GET` | `/` | Landing page |
-| `GET` | `/ambulance` | Ambulance telemetry portal |
-| `GET` | `/dashboard` | Hospital command dashboard |
+| `GET` | `/` | Landing page with pipeline visualization and live ML stats |
+| `GET` | `/ambulance` | Ambulance telemetry portal with ECG waveforms and GPS tracking |
+| `GET` | `/dashboard` | Hospital command dashboard with agent handshake log |
 | `GET` | `/docs` | Interactive Swagger API documentation |
-| `GET` | `/health` | Health check (for deployment monitoring) |
-| `GET` | `/ml-status` | ML model metadata and performance metrics |
+| `GET` | `/health` | Health check with uptime, model version, and prediction count |
+| `GET` | `/ml-status` | ML model metadata, accuracy, cross-validation, and feature importances |
+| `GET` | `/ml-evaluation` | Full ML evaluation: confusion matrix, classification report, CV scores |
+| `GET` | `/ledger?limit=20` | Last N entries from the SHA-256 audit trail |
 | `GET` | `/patient/{abha_id}` | ABHA patient registry lookup |
-| `POST` | `/predict` | ML-powered triage prediction |
+| `POST` | `/predict` | ML-powered triage prediction with agent routing |
 
 ### Socket.IO Events
 
 | Event | Direction | Payload |
-|-------|-----------|---------|
+|-------|-----------|---------| 
 | `vitals` | Client → Server | `{heartRate, spo2, lat, lng, timestamp}` |
-| `update` | Server → All Clients | `{status, risk_score, ml_confidence, assigned_hospital, secure_hash, ...}` |
+| `update` | Server → All Clients | `{status, risk_score, ml_confidence, assigned_hospital, secure_hash, handshake_log, ...}` |
 | `fetch_patient` | Client → Server | `abha_id` (string) |
 | `patient_data_received` | Server → All Clients | `{name, age, blood_group, allergies, history}` |
 | `send_message` | Client → Server | `{sender, message, time}` |
@@ -299,9 +365,10 @@ python run.py
 
 ## 🔐 Security & Compliance
 
-- **SHA-256 Audit Ledger**: Every vitals transmission is hashed and appended to an immutable JSONL file, creating a verifiable chain of custody for legal and medical audit purposes.
+- **SHA-256 Audit Ledger**: Every vitals transmission is hashed and appended to an immutable JSONL file, creating a verifiable chain of custody for legal and medical audit purposes. Ledger auto-rotates at 1000 entries.
 - **ABHA Integration**: Simulates India's Ayushman Bharat Health Account (ABHA) identity system for patient verification.
 - **CORS Configured**: Cross-origin resource sharing properly configured for secure WebSocket connections.
+- **Input Validation**: All vitals inputs are clamped to physiologically valid ranges.
 
 ---
 

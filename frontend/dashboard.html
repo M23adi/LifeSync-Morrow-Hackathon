@@ -119,6 +119,19 @@
       box-shadow: inset 0 0 8px rgba(0,0,0,0.4); 
     }
 
+    /* Agent Log */
+    .agent-log {
+      background: rgba(0,0,0,0.4); border-radius: 8px; padding: 8px;
+      max-height: 90px; overflow-y: auto; font-size: 10px;
+      border: 1px solid rgba(255,255,255,0.05);
+    }
+    .agent-log-entry {
+      padding: 3px 6px; border-radius: 4px; margin-bottom: 3px;
+      font-family: 'Fira Code'; line-height: 1.4;
+    }
+    .agent-log-entry.granted { color: var(--success); background: rgba(16, 185, 129, 0.06); }
+    .agent-log-entry.denied { color: var(--danger); background: rgba(239, 68, 68, 0.06); }
+
     /* Chat UI */
     #chatBox { 
       flex: 1; 
@@ -168,6 +181,16 @@
       animation: pulse-wave 2s infinite;
     }
     @keyframes pulse-wave { 0% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.6); } 70% { box-shadow: 0 0 0 15px rgba(16, 185, 129, 0); } 100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); } }
+
+    /* ETA Badge */
+    .eta-badge {
+      position: absolute; bottom: 16px; left: 16px; z-index: 1000;
+      background: rgba(15, 23, 42, 0.85); border: 1px solid rgba(14, 165, 233, 0.4);
+      color: var(--accent); padding: 10px 16px; border-radius: 10px;
+      font-family: 'Outfit'; font-weight: 700; font-size: 13px;
+      backdrop-filter: blur(10px); box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+      display: none; align-items: center; gap: 8px;
+    }
 
     /* Scrollbar */
     ::-webkit-scrollbar { width: 5px; }
@@ -239,6 +262,10 @@
       <div class="card-title">3. ACTS</div>
       <div class="card-subtitle">Autonomous Route Assignment</div>
       <div id="destinationDisplay" style="font-size: 14px; font-weight: 700; color: #60a5fa; font-family: 'Outfit';">Awaiting coordinates...</div>
+      <div id="bedDisplay" style="font-size: 11px; color: var(--text-muted); margin-top: 4px; font-weight: 600;"></div>
+      <div id="etaText" style="font-size: 11px; color: var(--success); margin-top: 2px; font-weight: 700;"></div>
+      <!-- Agent Handshake Log -->
+      <div class="agent-log" id="agentLog" style="margin-top: 8px;"></div>
     </div>
     
     <!-- Secure: Ledger -->
@@ -254,6 +281,9 @@
     <button class="green-wave-btn" id="greenWaveBtn" onclick="toggleGreenWave()">
       <span style="font-size: 16px;">🚦</span> Activate Green Wave
     </button>
+    <div class="eta-badge" id="etaBadge">
+      🚑 ETA: <span id="etaBadgeValue">--</span>
+    </div>
     <div id="map"></div>
   </div>
   
@@ -303,7 +333,7 @@
       document.getElementById('pHistory').innerText = patient.history.join(", ");
     });
 
-    // ==================== MAP (CartoDB Dark — FREE, NO API KEY) ====================
+    // ==================== MAP (OpenStreetMap — FREE, NO API KEY) ====================
     const map = L.map('map', { zoomControl: false }).setView([18.52, 73.85], 13);
     L.control.zoom({ position: 'bottomright' }).addTo(map);
 
@@ -328,12 +358,22 @@
         btn.classList.remove('active');
         btn.innerHTML = `<span style="font-size: 16px;">🚦</span> Activate Green Wave`;
       }
-      // Update route style
       if (routeLine) {
         const color = greenWaveActive ? '#10b981' : '#3b82f6';
         const weight = greenWaveActive ? 7 : 4;
         routeLine.setStyle({ color, weight, opacity: 0.85 });
       }
+    }
+
+    // ==================== AGENT LOG ====================
+    function updateAgentLog(handshakeLog) {
+      if (!handshakeLog || handshakeLog.length === 0) return;
+      const logDiv = document.getElementById('agentLog');
+      logDiv.innerHTML = handshakeLog.map(entry => {
+        const cls = entry.result === 'GRANTED' ? 'granted' : 'denied';
+        const icon = entry.result === 'GRANTED' ? '✅' : '❌';
+        return `<div class="agent-log-entry ${cls}">${icon} ${entry.hospital} — ${entry.result}${entry.reason ? ' (' + entry.reason + ')' : ''} ${entry.distance_km ? '| ' + entry.distance_km + 'km' : ''}</div>`;
+      }).join('');
     }
 
     // ==================== SOCKET UPDATE ====================
@@ -351,7 +391,25 @@
       
       if (data.triage_horizon) document.getElementById('horizonDisplay').innerText = "Triage Horizon: " + data.triage_horizon;
       hashDisplay.innerText = data.secure_hash || "Hashing...";
-      if (assignedHospital) destinationDisplay.innerText = assignedHospital.name + " (" + assignedHospital.type + ")";
+      
+      if (assignedHospital) {
+        destinationDisplay.innerText = assignedHospital.name + " (" + assignedHospital.type + ")";
+        // Bed count
+        if (assignedHospital.beds_available !== undefined) {
+          document.getElementById('bedDisplay').innerText = `🛏️ ${assignedHospital.beds_available} beds available`;
+        }
+        // ETA
+        if (assignedHospital.eta) {
+          document.getElementById('etaText').innerText = `🚑 ETA: ${assignedHospital.eta} | ${assignedHospital.distance_km || '--'} km`;
+          document.getElementById('etaBadge').style.display = 'flex';
+          document.getElementById('etaBadgeValue').innerText = assignedHospital.eta;
+        }
+      }
+
+      // Agent handshake log
+      if (data.handshake_log) {
+        updateAgentLog(data.handshake_log);
+      }
 
       // ML Confidence
       if (data.ml_confidence) {
@@ -414,10 +472,10 @@
         if (!hospitalMarker) {
           map.setView([data.lat, data.lng], 14); 
           hospitalMarker = L.marker([assignedHospital.lat, assignedHospital.lng], { icon: hospitalIcon }).addTo(map)
-            .bindPopup(`<div style="color:#000;font-family:'Inter';"><b>${assignedHospital.name}</b><br>AI Assigned: ${assignedHospital.type}</div>`).openPopup();
+            .bindPopup(`<div style="color:#000;font-family:'Inter';"><b>${assignedHospital.name}</b><br>AI Assigned: ${assignedHospital.type}<br>Beds: ${assignedHospital.beds_available || '--'}</div>`).openPopup();
         } else {
           hospitalMarker.setLatLng([assignedHospital.lat, assignedHospital.lng])
-            .bindPopup(`<div style="color:#000;font-family:'Inter';"><b>${assignedHospital.name}</b><br>AI Assigned: ${assignedHospital.type}</div>`);
+            .bindPopup(`<div style="color:#000;font-family:'Inter';"><b>${assignedHospital.name}</b><br>AI Assigned: ${assignedHospital.type}<br>Beds: ${assignedHospital.beds_available || '--'}</div>`);
         }
         
         // Ambulance marker

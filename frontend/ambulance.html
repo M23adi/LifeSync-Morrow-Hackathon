@@ -6,7 +6,7 @@
   <title>Ambulance Edge Telemetry — LifeSync</title>
   <meta name="description" content="Real-time ambulance telemetry with live vitals, AI triage, and GPS routing.">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&family=Outfit:wght@500;700;900&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&family=Outfit:wght@500;700;900&family=Fira+Code:wght@500&display=swap" rel="stylesheet">
   <style>
     :root {
       --bg-dark: #020617;
@@ -136,6 +136,17 @@
       gap: 8px;
     }
 
+    /* Connection indicator */
+    .conn-indicator {
+      display: flex; align-items: center; gap: 6px;
+      font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;
+    }
+    .conn-dot {
+      width: 8px; height: 8px; border-radius: 50%; transition: background 0.3s;
+    }
+    .conn-dot.connected { background: var(--success); box-shadow: 0 0 8px var(--success); }
+    .conn-dot.disconnected { background: var(--danger); box-shadow: 0 0 8px var(--danger); }
+
     /* ABHA Search */
     .abha-search {
       display: flex; gap: 8px; align-items: center;
@@ -165,6 +176,20 @@
     }
     .patient-info strong { color: var(--success); font-size: 14px; display: block; margin-bottom: 4px; }
 
+    /* Risk Gauge */
+    .risk-gauge-container {
+      background: linear-gradient(145deg, rgba(30, 41, 59, 0.6), rgba(15, 23, 42, 0.9));
+      border-radius: 12px; padding: 12px; border: 1px solid rgba(255,255,255,0.05);
+    }
+    .risk-gauge-bg {
+      width: 100%; height: 6px; background: rgba(0,0,0,0.4); border-radius: 4px; overflow: hidden; margin-top: 6px; border: 1px solid rgba(255,255,255,0.05);
+    }
+    .risk-gauge-fill {
+      height: 100%; width: 0%; border-radius: 4px; transition: width 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    }
+    .prob-row { display: flex; justify-content: space-between; font-size: 10px; margin-top: 6px; color: var(--text-muted); font-weight: 600; }
+    .prob-row .val { font-family: 'Fira Code'; }
+
     /* Map */
     #map { width: 100%; height: 100%; background: #0a0a0a; }
 
@@ -183,7 +208,29 @@
       animation: blink 1s infinite;
     }
 
+    /* ETA overlay */
+    .eta-overlay {
+      position: absolute; bottom: 14px; left: 14px; z-index: 1000;
+      background: rgba(15, 23, 42, 0.85); backdrop-filter: blur(10px);
+      border: 1px solid rgba(16, 185, 129, 0.4); border-radius: 10px;
+      padding: 10px 16px; color: var(--success); font-family: 'Outfit';
+      font-weight: 700; font-size: 13px;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+      display: flex; align-items: center; gap: 8px;
+    }
+
     @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.2; } }
+
+    /* Vitals History */
+    .vitals-history {
+      max-height: 100px; overflow-y: auto; font-size: 10px;
+      background: rgba(0,0,0,0.3); border-radius: 8px; padding: 6px 8px;
+      border: 1px solid rgba(255,255,255,0.05);
+    }
+    .vitals-history table { width: 100%; border-collapse: collapse; }
+    .vitals-history th { color: var(--accent); font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; text-align: left; padding: 2px 4px; }
+    .vitals-history td { color: var(--text-muted); padding: 2px 4px; font-family: 'Fira Code'; }
+    .vitals-history tr:nth-child(even) { background: rgba(255,255,255,0.02); }
 
     /* Chat UI */
     #chatBox { 
@@ -264,6 +311,10 @@
     <div class="agentic-banner">
       <span>⚡</span>
       <b>AGENTIC AI ACTIVE</b> — ML-powered triage inference running
+      <div style="margin-left: auto;" class="conn-indicator">
+        <div class="conn-dot connected" id="connDot"></div>
+        <span id="connLabel">Connected</span>
+      </div>
     </div>
     
     <div class="card" style="padding: 12px;">
@@ -296,6 +347,30 @@
         <canvas id="spo2Graph" style="margin-top: 8px;"></canvas>
       </div>
     </div>
+
+    <!-- Risk Gauge (NEW) -->
+    <div class="risk-gauge-container">
+      <div style="display: flex; justify-content: space-between; align-items: center;">
+        <div class="card-title" style="margin: 0;">Deterioration Index</div>
+        <div id="riskDisplay" style="font-family: 'Outfit'; font-size: 18px; font-weight: 900; color: var(--success);">0%</div>
+      </div>
+      <div class="risk-gauge-bg">
+        <div id="riskFill" class="risk-gauge-fill" style="background: var(--success); width: 0%;"></div>
+      </div>
+      <div class="prob-row" id="probRow">
+        <span>S: <span class="val" id="probStable">--</span>%</span>
+        <span>W: <span class="val" id="probWarning">--</span>%</span>
+        <span>C: <span class="val" id="probCritical">--</span>%</span>
+      </div>
+    </div>
+
+    <!-- Vitals History (NEW) -->
+    <div class="vitals-history" id="vitalsHistory">
+      <table>
+        <thead><tr><th>Time</th><th>HR</th><th>SpO2</th><th>Status</th></tr></thead>
+        <tbody id="vitalsHistoryBody"></tbody>
+      </table>
+    </div>
   </div>
   
   <!-- MIDDLE PANEL: Live Map -->
@@ -303,6 +378,9 @@
     <div class="map-overlay-badge">
       <div class="live-dot"></div>
       GPS TRACKING — LIVE
+    </div>
+    <div class="eta-overlay" id="etaOverlay" style="display: none;">
+      🏥 <span id="etaDisplay">--</span>
     </div>
     <div id="map"></div>
   </div>
@@ -335,6 +413,20 @@
     const spo2Display = document.getElementById('spo2Display');
     const aiStatus = document.getElementById('aiStatus');
     const mlConfidence = document.getElementById('mlConfidence');
+    const connDot = document.getElementById('connDot');
+    const connLabel = document.getElementById('connLabel');
+
+    // Connection status
+    socket.on('connect', () => {
+      connDot.className = 'conn-dot connected';
+      connLabel.innerText = 'Connected';
+      connLabel.style.color = 'var(--success)';
+    });
+    socket.on('disconnect', () => {
+      connDot.className = 'conn-dot disconnected';
+      connLabel.innerText = 'Disconnected';
+      connLabel.style.color = 'var(--danger)';
+    });
 
     // ==================== ABHA LOGIC ====================
     function fetchPatient() {
@@ -345,7 +437,7 @@
     socket.on('patient_data_received', (patient) => {
       const div = document.getElementById('patientInfoAmbulance');
       div.style.display = 'block';
-      div.innerHTML = `<strong>👤 Verified ABHA Identity</strong>Name: ${patient.name} &nbsp;|&nbsp; Age: ${patient.age} &nbsp;|&nbsp; Blood: <span style="color:var(--danger);font-weight:bold;">${patient.blood_group}</span><br><span style="color: #f87171; display:inline-block; margin-top:4px;">⚠️ Allergies: ${patient.allergies.join(", ")}</span>`;
+      div.innerHTML = `<strong>👤 Verified ABHA Identity</strong>Name: ${patient.name} &nbsp;|&nbsp; Age: ${patient.age} &nbsp;|&nbsp; Blood: <span style="color:var(--danger);font-weight:bold;">${patient.blood_group}</span><br><span style="color: #f87171; display:inline-block; margin-top:4px;">⚠️ Allergies: ${patient.allergies.join(", ")}</span><br><span style="color: var(--text-muted); display:inline-block; margin-top:2px; font-size: 11px;">📋 History: ${patient.history.join(", ")}</span>`;
     });
 
     socket.on('patient_not_found', () => {
@@ -358,6 +450,7 @@
     let currentHR = 80, currentSpO2 = 98;
     let currentLat = 18.5204, currentLng = 73.8567;
     let offlineQueue = []; 
+    let vitalsLog = [];
 
     setInterval(() => {
       currentHR += Math.floor((Math.random() - 0.4) * 6); 
@@ -453,6 +546,19 @@
     let hospitalMarker = null;
     let routeLine = null;
 
+    // ==================== VITALS HISTORY ====================
+    function addVitalsToHistory(hr, spo2, status) {
+      const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+      vitalsLog.unshift({ time, hr, spo2, status });
+      if (vitalsLog.length > 10) vitalsLog.pop();
+
+      const tbody = document.getElementById('vitalsHistoryBody');
+      tbody.innerHTML = vitalsLog.map(v => {
+        const statusColor = v.status === 'CRITICAL' ? 'var(--danger)' : v.status === 'WARNING' ? 'var(--warning)' : 'var(--success)';
+        return `<tr><td>${v.time}</td><td>${v.hr}</td><td>${v.spo2}</td><td style="color:${statusColor};font-weight:700;">${v.status}</td></tr>`;
+      }).join('');
+    }
+
     // ==================== SOCKET UPDATE HANDLER ====================
     socket.on('update', data => {
       if (!socket.connected) return;
@@ -477,6 +583,30 @@
         document.getElementById('horizonDisplay').innerText = "HORIZON: " + data.triage_horizon;
       }
 
+      // Risk gauge
+      const risk = data.risk_score || 0;
+      const riskDisplay = document.getElementById('riskDisplay');
+      const riskFill = document.getElementById('riskFill');
+      riskDisplay.innerText = risk + '%';
+      riskFill.style.width = risk + '%';
+      
+      let fillColor = 'var(--success)';
+      let riskColor = 'var(--success)';
+      if (risk > 80) { fillColor = 'var(--danger)'; riskColor = 'var(--danger)'; }
+      else if (risk > 50) { fillColor = 'var(--warning)'; riskColor = 'var(--warning)'; }
+      riskFill.style.background = fillColor;
+      riskDisplay.style.color = riskColor;
+
+      // Probabilities
+      if (data.probabilities) {
+        document.getElementById('probStable').innerText = data.probabilities.stable;
+        document.getElementById('probWarning').innerText = data.probabilities.warning;
+        document.getElementById('probCritical').innerText = data.probabilities.critical;
+      }
+
+      // Vitals history
+      addVitalsToHistory(data.heartRate || currentHR, data.spo2 || currentSpO2, stat);
+
       // Update map
       if (data.lat && data.lng) {
         ambulanceMarker.setLatLng([data.lat, data.lng]);
@@ -484,12 +614,18 @@
         if (data.assigned_hospital) {
           const hosp = data.assigned_hospital;
           
+          // ETA display
+          if (hosp.eta) {
+            document.getElementById('etaOverlay').style.display = 'flex';
+            document.getElementById('etaDisplay').innerText = `${hosp.name} — ETA: ${hosp.eta}`;
+          }
+
           if (!hospitalMarker) {
             hospitalMarker = L.marker([hosp.lat, hosp.lng], { icon: hospitalIcon }).addTo(map)
-              .bindPopup(`<div style="color:#000;font-family:'Inter';"><b>${hosp.name}</b><br>Type: ${hosp.type}</div>`);
+              .bindPopup(`<div style="color:#000;font-family:'Inter';"><b>${hosp.name}</b><br>Type: ${hosp.type}<br>Beds: ${hosp.beds_available || '--'}</div>`);
           } else {
             hospitalMarker.setLatLng([hosp.lat, hosp.lng])
-              .bindPopup(`<div style="color:#000;font-family:'Inter';"><b>${hosp.name}</b><br>Type: ${hosp.type}</div>`);
+              .bindPopup(`<div style="color:#000;font-family:'Inter';"><b>${hosp.name}</b><br>Type: ${hosp.type}<br>Beds: ${hosp.beds_available || '--'}</div>`);
           }
 
           // Animated polyline (no API needed!)
@@ -506,7 +642,7 @@
               if (!window[key]) {
                 const icon = h.name === hosp.name ? hospitalIcon : L.icon({ iconUrl: 'https://cdn-icons-png.flaticon.com/512/8040/8040626.png', iconSize: [22, 22] });
                 window[key] = L.marker([h.lat, h.lng], { icon }).addTo(map)
-                  .bindPopup(`<div style="color:#000;font-family:'Inter';"><b>${h.name}</b><br>${h.capacity_full ? '<span style="color:red;">ER FULL</span>' : '<span style="color:#10b981;">AVAILABLE</span>'}</div>`);
+                  .bindPopup(`<div style="color:#000;font-family:'Inter';"><b>${h.name}</b><br>${h.capacity_full ? '<span style="color:red;">ER FULL</span>' : '<span style="color:#10b981;">AVAILABLE (' + h.beds_available + ' beds)</span>'}</div>`);
               }
             });
           }

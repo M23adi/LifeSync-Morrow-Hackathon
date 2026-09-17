@@ -28,6 +28,7 @@ desktop.ini
 
 # Data (auto-generated at runtime)
 data/secure_ledger.jsonl
+data/lifesync_model.joblib
 
 # Misc
 *.log

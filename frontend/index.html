@@ -3,9 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>LifeSync - Agentic AI Emergency Network</title>
-    <!-- Modern Fonts -->
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&family=Outfit:wght@400;700;900&display=swap" rel="stylesheet">
+    <title>LifeSync — Agentic AI Emergency Network</title>
+    <meta name="description" content="LifeSync: AI-driven real-time clinical triage, ABHA identity verification, and autonomous hospital routing. Closing the emergency information blindspot.">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&family=Outfit:wght@400;700;900&family=Fira+Code:wght@500&display=swap" rel="stylesheet">
     <style>
         :root {
             --bg-dark: #020617;
@@ -13,31 +13,38 @@
             --primary: #0ea5e9;
             --primary-glow: rgba(14, 165, 233, 0.4);
             --secondary: #10b981;
+            --accent: #38bdf8;
             --text-main: #f8fafc;
             --text-muted: #94a3b8;
             --glass-bg: rgba(15, 23, 42, 0.4);
             --glass-border: rgba(255, 255, 255, 0.08);
+            --danger: #ef4444;
+            --warning: #f59e0b;
         }
         
         * { margin: 0; padding: 0; box-sizing: border-box; }
         
         body {
             font-family: 'Inter', sans-serif;
-            background: radial-gradient(circle at top center, var(--bg-lighter), var(--bg-dark));
+            background: var(--bg-dark);
             color: var(--text-main);
             min-height: 100vh;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            padding: 20px;
             overflow-x: hidden;
             position: relative;
         }
 
+        /* Particle Canvas */
+        #particleCanvas {
+            position: fixed;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            z-index: 0;
+            pointer-events: none;
+        }
+
         /* Ambient Glow Background */
         .ambient-glow {
-            position: absolute;
+            position: fixed;
             top: -20%;
             left: 50%;
             transform: translateX(-50%);
@@ -45,9 +52,22 @@
             height: 60vh;
             background: radial-gradient(circle, var(--primary-glow) 0%, transparent 70%);
             filter: blur(100px);
-            z-index: -1;
+            z-index: 0;
             opacity: 0.5;
             animation: pulse-glow 8s infinite alternate;
+        }
+
+        .ambient-glow-2 {
+            position: fixed;
+            bottom: -30%;
+            right: -10%;
+            width: 50vw;
+            height: 50vh;
+            background: radial-gradient(circle, rgba(16, 185, 129, 0.2) 0%, transparent 70%);
+            filter: blur(120px);
+            z-index: 0;
+            opacity: 0.4;
+            animation: pulse-glow 10s infinite alternate-reverse;
         }
 
         @keyframes pulse-glow {
@@ -55,11 +75,18 @@
             100% { opacity: 0.6; transform: translateX(-50%) scale(1.1); }
         }
 
-        .header {
-            text-align: center;
-            margin-bottom: 60px;
+        .page-content {
             position: relative;
             z-index: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 40px 20px 60px;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 50px;
         }
 
         .badge {
@@ -67,12 +94,12 @@
             background: rgba(14, 165, 233, 0.1);
             border: 1px solid var(--primary);
             color: #7dd3fc;
-            font-size: 13px;
+            font-size: 12px;
             font-weight: 700;
             padding: 8px 20px;
             border-radius: 999px;
             margin-bottom: 24px;
-            letter-spacing: 1px;
+            letter-spacing: 1.5px;
             text-transform: uppercase;
             box-shadow: 0 0 15px rgba(14, 165, 233, 0.2);
             backdrop-filter: blur(10px);
@@ -80,32 +107,117 @@
 
         h1 {
             font-family: 'Outfit', sans-serif;
-            font-size: 56px;
+            font-size: clamp(36px, 6vw, 60px);
             font-weight: 900;
             background: linear-gradient(135deg, #ffffff 30%, #94a3b8 100%);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
             margin-bottom: 16px;
-            letter-spacing: -1px;
+            letter-spacing: -1.5px;
             line-height: 1.1;
         }
 
         p.subtitle {
             color: var(--text-muted);
-            font-size: 18px;
+            font-size: 17px;
             max-width: 650px;
             margin: 0 auto;
-            line-height: 1.6;
+            line-height: 1.7;
             font-weight: 300;
         }
 
+        /* ===== PIPELINE SECTION ===== */
+        .pipeline-section {
+            max-width: 1100px;
+            width: 100%;
+            margin-bottom: 50px;
+        }
+
+        .section-title {
+            font-family: 'Outfit', sans-serif;
+            font-size: 14px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            color: var(--primary);
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .pipeline-steps {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 16px;
+        }
+
+        .pipeline-step {
+            background: var(--glass-bg);
+            backdrop-filter: blur(20px);
+            border: 1px solid var(--glass-border);
+            border-radius: 16px;
+            padding: 24px 18px;
+            text-align: center;
+            position: relative;
+            transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+
+        .pipeline-step:hover {
+            transform: translateY(-6px);
+            border-color: rgba(14, 165, 233, 0.4);
+            box-shadow: 0 15px 40px rgba(14, 165, 233, 0.15);
+        }
+
+        .pipeline-step .step-num {
+            font-family: 'Outfit', sans-serif;
+            font-size: 40px;
+            font-weight: 900;
+            background: linear-gradient(135deg, var(--primary), var(--accent));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            display: block;
+            margin-bottom: 8px;
+        }
+
+        .pipeline-step .step-icon {
+            font-size: 28px;
+            margin-bottom: 10px;
+            display: block;
+        }
+
+        .pipeline-step h3 {
+            font-family: 'Outfit', sans-serif;
+            font-size: 16px;
+            font-weight: 700;
+            margin-bottom: 6px;
+        }
+
+        .pipeline-step p {
+            color: var(--text-muted);
+            font-size: 12px;
+            line-height: 1.5;
+        }
+
+        /* Connector arrows */
+        .pipeline-step:not(:last-child)::after {
+            content: '→';
+            position: absolute;
+            right: -15px;
+            top: 50%;
+            transform: translateY(-50%);
+            font-size: 20px;
+            color: rgba(14, 165, 233, 0.5);
+            font-weight: 800;
+            z-index: 2;
+        }
+
+        /* ===== PORTAL CARDS ===== */
         .cards-container {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-            gap: 30px;
+            gap: 24px;
             max-width: 1100px;
             width: 100%;
-            z-index: 1;
+            margin-bottom: 50px;
         }
 
         .card {
@@ -113,8 +225,8 @@
             backdrop-filter: blur(20px);
             -webkit-backdrop-filter: blur(20px);
             border: 1px solid var(--glass-border);
-            border-radius: 24px;
-            padding: 40px 30px;
+            border-radius: 20px;
+            padding: 36px 28px;
             text-decoration: none;
             color: inherit;
             display: flex;
@@ -124,10 +236,8 @@
             box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
             position: relative;
             overflow: hidden;
-            group: hover;
         }
 
-        /* Hover Glare Effect */
         .card::before {
             content: '';
             position: absolute;
@@ -137,48 +247,43 @@
             transition: 0.5s;
         }
         
-        .card:hover::before {
-            left: 150%;
-        }
+        .card:hover::before { left: 150%; }
 
         .card:hover {
-            transform: translateY(-10px);
+            transform: translateY(-8px);
             border-color: rgba(14, 165, 233, 0.5);
             box-shadow: 0 20px 50px rgba(14, 165, 233, 0.2);
             background: rgba(15, 23, 42, 0.7);
         }
 
         .icon {
-            font-size: 48px;
-            margin-bottom: 24px;
+            font-size: 44px;
+            margin-bottom: 20px;
             display: inline-block;
             transition: transform 0.3s ease;
         }
 
-        .card:hover .icon {
-            transform: scale(1.1);
-        }
+        .card:hover .icon { transform: scale(1.1); }
 
         .card h2 {
             font-family: 'Outfit', sans-serif;
-            font-size: 24px;
+            font-size: 22px;
             font-weight: 700;
-            margin-bottom: 12px;
-            color: var(--text-main);
+            margin-bottom: 10px;
         }
 
         .card p {
             color: var(--text-muted);
-            font-size: 15px;
+            font-size: 14px;
             line-height: 1.6;
-            margin-bottom: 30px;
+            margin-bottom: 24px;
         }
 
         .btn {
             display: inline-flex;
             align-items: center;
             gap: 10px;
-            font-size: 15px;
+            font-size: 14px;
             font-weight: 600;
             color: var(--primary);
             text-transform: uppercase;
@@ -190,8 +295,8 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            width: 30px;
-            height: 30px;
+            width: 28px;
+            height: 28px;
             background: rgba(14, 165, 233, 0.1);
             border-radius: 50%;
             transition: all 0.3s ease;
@@ -203,20 +308,72 @@
             transform: translateX(5px);
         }
 
+        /* ===== ML STATS CARD ===== */
+        .ml-stats-section {
+            max-width: 1100px;
+            width: 100%;
+            margin-bottom: 50px;
+        }
+
+        .ml-stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 16px;
+        }
+
+        .ml-stat-card {
+            background: linear-gradient(145deg, rgba(14, 165, 233, 0.06), rgba(59, 130, 246, 0.06));
+            border: 1px solid rgba(14, 165, 233, 0.2);
+            border-radius: 16px;
+            padding: 20px;
+            text-align: center;
+            transition: all 0.3s ease;
+        }
+
+        .ml-stat-card:hover {
+            transform: translateY(-4px);
+            border-color: rgba(14, 165, 233, 0.5);
+            box-shadow: 0 10px 30px rgba(14, 165, 233, 0.1);
+        }
+
+        .ml-stat-card .stat-label {
+            font-size: 11px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: var(--accent);
+            margin-bottom: 8px;
+        }
+
+        .ml-stat-card .stat-value {
+            font-family: 'Outfit', sans-serif;
+            font-size: 32px;
+            font-weight: 900;
+            color: var(--text-main);
+            text-shadow: 0 0 15px rgba(14, 165, 233, 0.3);
+        }
+
+        .ml-stat-card .stat-unit {
+            font-size: 14px;
+            color: var(--text-muted);
+            font-weight: 400;
+        }
+
+        /* ===== STATUS BAR ===== */
         .status-bar {
-            margin-top: 60px;
-            padding: 12px 30px;
+            padding: 12px 28px;
             background: var(--glass-bg);
             border: 1px solid var(--glass-border);
             border-radius: 999px;
-            font-size: 14px;
+            font-size: 13px;
             font-weight: 600;
             color: #cbd5e1;
             display: flex;
-            gap: 24px;
+            gap: 20px;
             align-items: center;
             backdrop-filter: blur(10px);
-            z-index: 1;
+            flex-wrap: wrap;
+            justify-content: center;
         }
 
         .dot {
@@ -247,60 +404,238 @@
             color: var(--primary);
             font-weight: 700;
         }
+
+        /* ===== RESPONSIVE ===== */
+        @media (max-width: 768px) {
+            .pipeline-steps {
+                grid-template-columns: repeat(2, 1fr);
+            }
+            .pipeline-step:nth-child(2)::after,
+            .pipeline-step:nth-child(4)::after {
+                display: none;
+            }
+            .cards-container {
+                grid-template-columns: 1fr;
+            }
+            .ml-stats-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+
+        @media (max-width: 480px) {
+            .pipeline-steps {
+                grid-template-columns: 1fr;
+            }
+            .pipeline-step::after {
+                display: none !important;
+            }
+            .ml-stats-grid {
+                grid-template-columns: 1fr;
+            }
+            .status-bar {
+                font-size: 11px;
+                gap: 12px;
+                padding: 10px 16px;
+            }
+        }
     </style>
 </head>
 <body>
+    <canvas id="particleCanvas"></canvas>
     <div class="ambient-glow"></div>
+    <div class="ambient-glow-2"></div>
 
-    <div class="header">
-        <div class="badge">⚡ Autonomous Emergency Connectivity</div>
-        <h1>LifeSync Platform</h1>
-        <p class="subtitle">AI-driven real-time clinical triage, ABHA identity verification, and autonomous hospital routing. Closing the information blindspot.</p>
+    <div class="page-content">
+        <div class="header">
+            <div class="badge">⚡ Autonomous Emergency Connectivity</div>
+            <h1>LifeSync Platform</h1>
+            <p class="subtitle">AI-driven real-time clinical triage, ABHA identity verification, and autonomous hospital routing. Closing the Golden Hour information blindspot.</p>
+        </div>
+
+        <!-- How It Works: Pipeline -->
+        <div class="pipeline-section">
+            <div class="section-title">🧠 Agentic AI Pipeline — How It Works</div>
+            <div class="pipeline-steps">
+                <div class="pipeline-step">
+                    <span class="step-num">01</span>
+                    <span class="step-icon">📡</span>
+                    <h3>Perceive</h3>
+                    <p>Ingest real-time vitals (HR, SpO2), GPS coordinates, and ABHA patient identity from the ambulance edge.</p>
+                </div>
+                <div class="pipeline-step">
+                    <span class="step-num">02</span>
+                    <span class="step-icon">🧠</span>
+                    <h3>Reason</h3>
+                    <p>ML model (GradientBoosting, 98.9% accuracy) predicts deterioration: STABLE → WARNING → CRITICAL.</p>
+                </div>
+                <div class="pipeline-step">
+                    <span class="step-num">03</span>
+                    <span class="step-icon">🤖</span>
+                    <h3>Act</h3>
+                    <p>Multi-agent handshake negotiates with hospital agents, routing to optimal facility with available beds.</p>
+                </div>
+                <div class="pipeline-step">
+                    <span class="step-num">04</span>
+                    <span class="step-icon">🔐</span>
+                    <h3>Secure</h3>
+                    <p>Every transaction hashed with SHA-256 and appended to an immutable cryptographic audit ledger.</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Portal Cards -->
+        <div class="cards-container">
+            <a href="/ambulance" class="card" target="_blank">
+                <div>
+                    <div class="icon">🚑</div>
+                    <h2>Ambulance Edge</h2>
+                    <p>Simulate live patient vitals, real-time ECG/SpO2 waveforms, ABHA registry lookup, and dead-zone burst cache resilience.</p>
+                </div>
+                <div class="btn">
+                    Launch Ambulance <span class="btn-icon">&rarr;</span>
+                </div>
+            </a>
+
+            <a href="/dashboard" class="card" target="_blank">
+                <div>
+                    <div class="icon">🏥</div>
+                    <h2>Hospital Command</h2>
+                    <p>Live map with AI route dispatch, multi-agent handshake negotiation, ML deterioration gauge, and SHA-256 vault.</p>
+                </div>
+                <div class="btn">
+                    Launch Dashboard <span class="btn-icon">&rarr;</span>
+                </div>
+            </a>
+
+            <a href="/docs" class="card" target="_blank">
+                <div>
+                    <div class="icon">🔌</div>
+                    <h2>API & Analytics</h2>
+                    <p>Swagger docs for all endpoints: triage scoring, ML evaluation with confusion matrix, ABHA lookup, and audit ledger.</p>
+                </div>
+                <div class="btn">
+                    View Swagger <span class="btn-icon">&rarr;</span>
+                </div>
+            </a>
+        </div>
+
+        <!-- ML Stats (live fetched) -->
+        <div class="ml-stats-section">
+            <div class="section-title">🧠 Live ML Engine Status</div>
+            <div class="ml-stats-grid">
+                <div class="ml-stat-card">
+                    <div class="stat-label">Model Accuracy</div>
+                    <div class="stat-value" id="mlAccuracy">--<span class="stat-unit">%</span></div>
+                </div>
+                <div class="ml-stat-card">
+                    <div class="stat-label">Cross-Val Mean</div>
+                    <div class="stat-value" id="mlCV">--<span class="stat-unit">%</span></div>
+                </div>
+                <div class="ml-stat-card">
+                    <div class="stat-label">Training Time</div>
+                    <div class="stat-value" id="mlTrainTime">--<span class="stat-unit">ms</span></div>
+                </div>
+                <div class="ml-stat-card">
+                    <div class="stat-label">Predictions Made</div>
+                    <div class="stat-value" id="mlPredictions">--</div>
+                </div>
+                <div class="ml-stat-card">
+                    <div class="stat-label">Model Version</div>
+                    <div class="stat-value" id="mlVersion" style="font-family:'Fira Code'; font-size: 14px; word-break: break-all;">--</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="status-bar">
+            <span><span class="dot"></span> Agentic Backend Online</span>
+            <span>WebSocket: Active</span>
+            <span id="serverStatus">ML Engine: Loading...</span>
+        </div>
+
+        <div class="team-footer">
+            Developed by <span>Commitment_Issues</span> for Morrow 1.0 Hackathon
+        </div>
     </div>
 
-    <div class="cards-container">
-        <a href="/ambulance" class="card" target="_blank">
-            <div>
-                <div class="icon">🚑</div>
-                <h2>Ambulance Edge</h2>
-                <p>Simulate live patient vitals, real-time ECG/SpO2 waveforms, ABHA registry lookup, and dead-zone burst cache resilience.</p>
-            </div>
-            <div class="btn">
-                Launch Ambulance <span class="btn-icon">&rarr;</span>
-            </div>
-        </a>
+    <script>
+        // ==================== PARTICLE ANIMATION ====================
+        const canvas = document.getElementById('particleCanvas');
+        const ctx = canvas.getContext('2d');
+        let particles = [];
 
-        <a href="/dashboard" class="card" target="_blank">
-            <div>
-                <div class="icon">🏥</div>
-                <h2>Hospital Command</h2>
-                <p>Live global map with AI route dispatch, multi-agent handshake negotiation, trauma prep alerts, and SHA-256 cryptographic vault.</p>
-            </div>
-            <div class="btn">
-                Launch Dashboard <span class="btn-icon">&rarr;</span>
-            </div>
-        </a>
+        function resizeCanvas() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        }
+        resizeCanvas();
+        window.addEventListener('resize', resizeCanvas);
 
-        <a href="/docs" class="card" target="_blank">
-            <div>
-                <div class="icon">🔌</div>
-                <h2>API & Analytics</h2>
-                <p>Inspect backend endpoints: real-time triage scoring (Deterioration Index), predictive horizons, and ABHA lookup data pipelines.</p>
-            </div>
-            <div class="btn">
-                View Swagger <span class="btn-icon">&rarr;</span>
-            </div>
-        </a>
-    </div>
+        class Particle {
+            constructor() {
+                this.x = Math.random() * canvas.width;
+                this.y = Math.random() * canvas.height;
+                this.size = Math.random() * 2 + 0.5;
+                this.speedX = (Math.random() - 0.5) * 0.3;
+                this.speedY = (Math.random() - 0.5) * 0.3;
+                this.opacity = Math.random() * 0.4 + 0.1;
+            }
+            update() {
+                this.x += this.speedX;
+                this.y += this.speedY;
+                if (this.x < 0 || this.x > canvas.width) this.speedX *= -1;
+                if (this.y < 0 || this.y > canvas.height) this.speedY *= -1;
+            }
+            draw() {
+                ctx.fillStyle = `rgba(14, 165, 233, ${this.opacity})`;
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
 
-    <div class="status-bar">
-        <span><span class="dot"></span> Agentic Backend Online</span>
-        <span>WebSocket: Active</span>
-        <span>Port: 8000</span>
-    </div>
+        for (let i = 0; i < 60; i++) particles.push(new Particle());
 
-    <div class="team-footer">
-        Developed by <span>Commitment_Issues</span>
-    </div>
+        function animateParticles() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            particles.forEach(p => { p.update(); p.draw(); });
+
+            // Draw connections
+            for (let i = 0; i < particles.length; i++) {
+                for (let j = i + 1; j < particles.length; j++) {
+                    const dx = particles[i].x - particles[j].x;
+                    const dy = particles[i].y - particles[j].y;
+                    const dist = Math.sqrt(dx * dx + dy * dy);
+                    if (dist < 150) {
+                        ctx.strokeStyle = `rgba(14, 165, 233, ${0.06 * (1 - dist / 150)})`;
+                        ctx.lineWidth = 0.5;
+                        ctx.beginPath();
+                        ctx.moveTo(particles[i].x, particles[i].y);
+                        ctx.lineTo(particles[j].x, particles[j].y);
+                        ctx.stroke();
+                    }
+                }
+            }
+            requestAnimationFrame(animateParticles);
+        }
+        animateParticles();
+
+        // ==================== FETCH ML STATS ====================
+        async function fetchMLStats() {
+            try {
+                const res = await fetch('/ml-status');
+                const data = await res.json();
+                document.getElementById('mlAccuracy').innerHTML = data.accuracy + '<span class="stat-unit">%</span>';
+                document.getElementById('mlCV').innerHTML = (data.cross_validation?.mean_accuracy || '--') + '<span class="stat-unit">%</span>';
+                document.getElementById('mlTrainTime').innerHTML = data.training_time_ms + '<span class="stat-unit">ms</span>';
+                document.getElementById('mlPredictions').innerText = data.predictions_made || 0;
+                document.getElementById('mlVersion').innerText = data.model_version || '--';
+                document.getElementById('serverStatus').innerText = data.is_ready ? 'ML Engine: Ready ✅' : 'ML Engine: Loading...';
+            } catch (e) {
+                document.getElementById('serverStatus').innerText = 'ML Engine: Offline ❌';
+            }
+        }
+        fetchMLStats();
+        setInterval(fetchMLStats, 10000);
+    </script>
 </body>
 </html>

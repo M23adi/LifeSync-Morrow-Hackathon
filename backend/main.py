@@ -7,6 +7,7 @@ FastAPI + Socket.IO server providing:
   - ABHA patient identity registry
   - SHA-256 cryptographic audit ledger
   - WebSocket vitals streaming
+  - Comprehensive ML evaluation endpoints
 """
 
 import hashlib
@@ -14,6 +15,7 @@ import json
 import math
 import os
 import sys
+import time
 from pathlib import Path
 from typing import Optional
 from datetime import datetime
@@ -44,13 +46,14 @@ from ml_model import DeteriorationModel
 
 print("[BOOT] Initializing ML Deterioration Engine...")
 ml_engine = DeteriorationModel()
+SERVER_START_TIME = time.time()
 
 # --- Socket.IO Async Server & FastAPI App ---
 sio = socketio.AsyncServer(async_mode="asgi", cors_allowed_origins="*")
 app = FastAPI(
     title="LifeSync Agentic AI Platform",
     description="ML-powered emergency triage, agentic hospital routing, and real-time vitals monitoring.",
-    version="2.0.0"
+    version="2.0.0",
 )
 
 app.add_middleware(
@@ -60,6 +63,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# --- Ledger Settings ---
+MAX_LEDGER_ENTRIES = 1000
 
 
 class Vitals(BaseModel):
@@ -72,39 +78,116 @@ class Vitals(BaseModel):
 # --- 1. ABHA ID PATIENT REGISTRY (MOCK DATABASE) ---
 mock_abha_db = {
     "14-1234-5678-9012": {
-        "name": "Rajesh Kumar", "age": 45, "blood_group": "O+",
+        "name": "Rajesh Kumar",
+        "age": 45,
+        "blood_group": "O+",
         "allergies": ["Penicillin", "Peanuts"],
-        "history": ["Hypertension (2021)", "Appendectomy (2018)"]
+        "history": ["Hypertension (2021)", "Appendectomy (2018)"],
     },
     "14-9876-5432-1098": {
-        "name": "Priya Sharma", "age": 32, "blood_group": "A-",
+        "name": "Priya Sharma",
+        "age": 32,
+        "blood_group": "A-",
         "allergies": ["None"],
-        "history": ["Asthma"]
+        "history": ["Asthma"],
     },
     "14-5555-1234-7890": {
-        "name": "Amit Verma", "age": 58, "blood_group": "B+",
+        "name": "Amit Verma",
+        "age": 58,
+        "blood_group": "B+",
         "allergies": ["Sulfa drugs", "Iodine contrast"],
-        "history": ["Type 2 Diabetes (2015)", "CABG Surgery (2020)", "CKD Stage 2"]
-    }
+        "history": ["Type 2 Diabetes (2015)", "CABG Surgery (2020)", "CKD Stage 2"],
+    },
+    "14-7777-8888-9999": {
+        "name": "Ananya Patel",
+        "age": 27,
+        "blood_group": "AB+",
+        "allergies": ["Aspirin"],
+        "history": ["Iron-deficiency Anemia (2023)"],
+    },
+    "14-3333-4444-5555": {
+        "name": "Vikram Singh",
+        "age": 63,
+        "blood_group": "O-",
+        "allergies": ["NSAIDs", "Latex"],
+        "history": [
+            "Atrial Fibrillation (2019)",
+            "Hip Replacement (2022)",
+            "Chronic COPD",
+        ],
+    },
 }
 
 
 # --- 2. AGENTIC ROUTING & LOGIC ---
 def calculate_distance(lat1, lng1, lat2, lng2):
-    """Haversine-approximated distance between two GPS coordinates."""
-    return math.sqrt((lat2 - lat1) ** 2 + (lng2 - lng1) ** 2)
+    """Haversine-approximated distance between two GPS coordinates (km)."""
+    R = 6371  # Earth radius in km
+    dlat = math.radians(lat2 - lat1)
+    dlng = math.radians(lng2 - lng1)
+    a = (
+        math.sin(dlat / 2) ** 2
+        + math.cos(math.radians(lat1))
+        * math.cos(math.radians(lat2))
+        * math.sin(dlng / 2) ** 2
+    )
+    c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+    return round(R * c, 2)
+
+
+def estimate_eta(distance_km, speed_kmh=45):
+    """Estimate arrival time based on distance and average ambulance speed."""
+    if distance_km <= 0:
+        return "< 1 min"
+    minutes = (distance_km / speed_kmh) * 60
+    if minutes < 1:
+        return "< 1 min"
+    return f"~{int(minutes)} min{'s' if int(minutes) != 1 else ''}"
 
 
 def get_hospitals_near(lat, lng):
     """Return hospitals near the ambulance's current GPS position."""
     return [
-        {"name": "City General Hospital", "lat": lat + 0.015, "lng": lng + 0.012,
-         "type": "GENERAL", "capacity_full": False, "beds_available": 12},
-        {"name": "Metro Trauma Center", "lat": lat - 0.020, "lng": lng - 0.005,
-         "type": "TRAUMA", "capacity_full": True, "beds_available": 0},
-        {"name": "Advanced Trauma Institute", "lat": lat - 0.010, "lng": lng + 0.025,
-         "type": "TRAUMA", "capacity_full": False, "beds_available": 5}
+        {
+            "name": "City General Hospital",
+            "lat": lat + 0.015,
+            "lng": lng + 0.012,
+            "type": "GENERAL",
+            "capacity_full": False,
+            "beds_available": 12,
+        },
+        {
+            "name": "Metro Trauma Center",
+            "lat": lat - 0.020,
+            "lng": lng - 0.005,
+            "type": "TRAUMA",
+            "capacity_full": True,
+            "beds_available": 0,
+        },
+        {
+            "name": "Advanced Trauma Institute",
+            "lat": lat - 0.010,
+            "lng": lng + 0.025,
+            "type": "TRAUMA",
+            "capacity_full": False,
+            "beds_available": 5,
+        },
     ]
+
+
+def _rotate_ledger(ledger_path):
+    """Rotate ledger file if it exceeds MAX_LEDGER_ENTRIES."""
+    try:
+        if ledger_path.exists():
+            with open(ledger_path, "r", encoding="utf-8") as f:
+                lines = f.readlines()
+            if len(lines) > MAX_LEDGER_ENTRIES:
+                # Keep only the most recent entries
+                with open(ledger_path, "w", encoding="utf-8") as f:
+                    f.writelines(lines[-MAX_LEDGER_ENTRIES:])
+                print(f"[LEDGER] Rotated: kept last {MAX_LEDGER_ENTRIES} entries")
+    except Exception as e:
+        print(f"[LEDGER] Rotation error: {e}")
 
 
 def compute_risk(vitals: Vitals):
@@ -116,8 +199,12 @@ def compute_risk(vitals: Vitals):
     4. SECURE  — SHA-256 hash locks the transaction
     """
 
+    # --- Validate inputs ---
+    hr = max(20, min(250, vitals.heartRate))
+    spo2 = max(50, min(100, vitals.spo2))
+
     # --- REASON: ML Inference ---
-    ml_result = ml_engine.predict(vitals.heartRate, vitals.spo2)
+    ml_result = ml_engine.predict(hr, spo2)
     status = ml_result["status"]
     total_risk = ml_result["risk_score"]
     confidence = ml_result["confidence"]
@@ -129,7 +216,8 @@ def compute_risk(vitals: Vitals):
 
     # Filter: critical patients need TRAUMA facilities
     valid_hospitals = [
-        h for h in local_hospitals
+        h
+        for h in local_hospitals
         if not (status == "CRITICAL" and h["type"] != "TRAUMA")
     ]
 
@@ -139,28 +227,58 @@ def compute_risk(vitals: Vitals):
     )
 
     best_hospital = None
+    handshake_log = []
 
     # Multi-Agent Handshake Protocol
     for h in valid_hospitals:
+        distance = calculate_distance(vitals.lat, vitals.lng, h["lat"], h["lng"])
+        eta = estimate_eta(distance)
+
+        log_entry = {
+            "hospital": h["name"],
+            "type": h["type"],
+            "distance_km": distance,
+            "eta": eta,
+        }
+
         print(f"[AGENT HANDSHAKE] Pinging {h['name']} Agent for clearance...")
-        print(f"[AGENT HANDSHAKE] Requesting permission for {status} patient. Needs {h['type']} resources.")
+        print(
+            f"[AGENT HANDSHAKE] Requesting permission for {status} patient. Needs {h['type']} resources."
+        )
 
         if h.get("capacity_full"):
-            print(f"[AGENT HANDSHAKE] DENIED by {h['name']}. Reason: ER at capacity. Renegotiating...")
+            print(
+                f"[AGENT HANDSHAKE] DENIED by {h['name']}. Reason: ER at capacity. Renegotiating..."
+            )
+            log_entry["result"] = "DENIED"
+            log_entry["reason"] = "ER at capacity"
+            handshake_log.append(log_entry)
             continue
         else:
             print(f"[AGENT HANDSHAKE] GRANTED by {h['name']}. Route secured.\n")
+            log_entry["result"] = "GRANTED"
+            handshake_log.append(log_entry)
             best_hospital = h
+            best_hospital["distance_km"] = distance
+            best_hospital["eta"] = eta
             break
 
     if not best_hospital:
         best_hospital = local_hospitals[0]  # Fallback
+        best_hospital["distance_km"] = calculate_distance(
+            vitals.lat, vitals.lng, best_hospital["lat"], best_hospital["lng"]
+        )
+        best_hospital["eta"] = estimate_eta(best_hospital["distance_km"])
 
     # Blood Bank Pre-Fetch Agent
     if status in ("CRITICAL", "WARNING"):
-        print(f"[BLOOD AGENT] Deterioration Detected. Cross-referencing ABHA Registry...")
+        print(
+            f"[BLOOD AGENT] Deterioration Detected. Cross-referencing ABHA Registry..."
+        )
         print(f"[BLOOD AGENT] Patient Blood Type: O- (O Negative) identified.")
-        print(f"[BLOOD AGENT] Securing 2 units at {best_hospital['name']} Blood Bank prior to arrival...\n")
+        print(
+            f"[BLOOD AGENT] Securing 2 units at {best_hospital['name']} Blood Bank prior to arrival...\n"
+        )
 
     # Inject all hospitals into the payload for map rendering
     best_hospital_payload = best_hospital.copy()
@@ -168,8 +286,13 @@ def compute_risk(vitals: Vitals):
 
     # --- SECURE: SHA-256 Cryptographic Vault ---
     data_string = json.dumps(
-        {"hr": vitals.heartRate, "spo2": vitals.spo2, "lat": vitals.lat, "lng": vitals.lng},
-        sort_keys=True
+        {
+            "hr": vitals.heartRate,
+            "spo2": vitals.spo2,
+            "lat": vitals.lat,
+            "lng": vitals.lng,
+        },
+        sort_keys=True,
     )
     secure_hash = hashlib.sha256(data_string.encode()).hexdigest()
 
@@ -180,10 +303,11 @@ def compute_risk(vitals: Vitals):
         "status": status,
         "risk_score": total_risk,
         "ml_confidence": confidence,
-        "assigned_hospital": best_hospital["name"]
+        "assigned_hospital": best_hospital["name"],
     }
     try:
         ledger_path = DATA_DIR / "secure_ledger.jsonl"
+        _rotate_ledger(ledger_path)
         with open(ledger_path, "a", encoding="utf-8") as f:
             f.write(json.dumps(ledger_entry) + "\n")
     except Exception as e:
@@ -196,7 +320,8 @@ def compute_risk(vitals: Vitals):
         "assigned_hospital": best_hospital_payload,
         "triage_horizon": triage_horizon,
         "ml_confidence": confidence,
-        "probabilities": probabilities
+        "probabilities": probabilities,
+        "handshake_log": handshake_log,
     }
 
 
@@ -219,14 +344,57 @@ def calculate_risk_endpoint(vitals: Vitals):
 
 @app.get("/ml-status")
 def ml_status():
-    """Return ML model metadata: accuracy, features, training time."""
+    """Return ML model metadata: accuracy, features, training time, cross-validation."""
     return JSONResponse(content=ml_engine.get_model_info())
+
+
+@app.get("/ml-evaluation")
+def ml_evaluation():
+    """
+    Return comprehensive ML model evaluation report.
+    Includes confusion matrix, classification report, cross-validation scores,
+    hyperparameters, and runtime analytics.
+    """
+    return JSONResponse(content=ml_engine.get_evaluation_report())
+
+
+@app.get("/ledger")
+def get_ledger(limit: int = 20):
+    """Return the last N entries from the SHA-256 audit ledger."""
+    try:
+        ledger_path = DATA_DIR / "secure_ledger.jsonl"
+        if not ledger_path.exists():
+            return JSONResponse(content={"entries": [], "total": 0})
+        with open(ledger_path, "r", encoding="utf-8") as f:
+            lines = f.readlines()
+        entries = []
+        for line in lines[-min(limit, len(lines)):]:
+            try:
+                entries.append(json.loads(line.strip()))
+            except json.JSONDecodeError:
+                continue
+        return JSONResponse(
+            content={"entries": entries, "total": len(lines), "showing": len(entries)}
+        )
+    except Exception as e:
+        return JSONResponse(
+            content={"error": str(e)}, status_code=500
+        )
 
 
 @app.get("/health")
 def health_check():
     """Health check endpoint for Render deployment."""
-    return {"status": "ok", "ml_ready": ml_engine.is_ready, "version": "2.0.0"}
+    uptime_seconds = round(time.time() - SERVER_START_TIME, 1)
+    return {
+        "status": "ok",
+        "ml_ready": ml_engine.is_ready,
+        "version": "2.0.0",
+        "uptime_seconds": uptime_seconds,
+        "model_version": ml_engine.model_version,
+        "predictions_made": ml_engine.prediction_count,
+        "timestamp": datetime.now().isoformat(),
+    }
 
 
 # --- Frontend Serving Routes ---
@@ -258,6 +426,7 @@ def get_root():
 def favicon():
     """Return empty response to prevent 404 noise in browser console."""
     from starlette.responses import Response
+
     return Response(status_code=204)
 
 
